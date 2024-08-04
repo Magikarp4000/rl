@@ -1,5 +1,6 @@
 import random, time, datetime
 from abc import ABC, abstractmethod
+
 import numpy as np
 import data_transfer
 
@@ -190,7 +191,7 @@ class MCAgent(Agent):
         self.pi = np.array([])
         self.q_record = []
         self.pi_record = []
-        self.eps = 0
+        self.b = []
     
     def train(self, algo, num_epsd, gamma=1, eps=0.1, save_params=True, save_time=True):
         if save_params:
@@ -201,43 +202,80 @@ class MCAgent(Agent):
         self.pi = np.array([0 for _ in self.states], dtype='int')
         self.q_record.clear()
         self.pi_record.clear()
-        self.eps = eps
         if algo == 'onpolicy':
-            self.onpolicy(num_epsd, gamma)
+            self.onpolicy(num_epsd, gamma, eps)
+        elif algo == 'offpolicy':
+            self.offpolicy(num_epsd, gamma)
         else:
             print("Invalid algorithm mate")
     
     def get_action(self, s):
-        if random.random() <= self.eps:
-            return random.randint(0, len(self.actions[s]) - 1)
-        return self.pi[s]
+        return np.random.choice(len(self.actions[s]), p=self.b[s])
     
-    def onpolicy(self, num_epsd, gamma):
-        nums = [[0 for _ in self.actions[s]] for s in range(self.size)]
-        returns = [[[] for _ in self.actions[s]] for s in range(self.size)]
-        for num in range(num_epsd):
-            start_time = time.time()
-            seq = self.get_episode()
-            returns = self.get_returns(returns, seq, gamma)
-            for s in range(self.size):
-                for a in range(len(self.actions[s])):
-                    if returns[s][a]:
-                        x = len(returns[s][a])
-                        self.q[s][a] += (sum(returns[s][a]) - x * self.q[s][a]) / (nums[s][a] + x)
-                        nums[s][a] += x
-                        returns[s][a].clear()
-                self.pi[s] = np.argmax(self.q[s])
-            end_time = time.time()
-            print(f"Episode {num} complete in {round(end_time - start_time, 5)}s.")
-    
-    def get_returns(self, returns, seq, gamma):
+    def on_epsd(self, gamma, eps, seq, returns, nums):
         g = 0
         for step in reversed(seq):
             s, a, reward = step
             g = reward + gamma * g
             returns[s][a].append(g)
-        return returns
+        for s in range(self.size):
+            for a in range(len(self.actions[s])):
+                if returns[s][a]:
+                    x = len(returns[s][a])
+                    self.q[s][a] += (sum(returns[s][a]) - x * self.q[s][a]) / (nums[s][a] + x)
+                    nums[s][a] += x
+                    returns[s][a].clear()
+            old_pi = self.pi[s]
+            self.pi[s] = np.argmax(self.q[s])
+            self.b[s][old_pi] = eps / len(self.actions[s])
+            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+        return returns, nums
 
+    def onpolicy(self, num_epsd, gamma, eps, batch_size=10000):
+        self.b = [np.full(len(self.actions[s]), eps / len(self.actions[s]))
+                  for s in range(self.size)]
+        for s in range(self.size):
+            self.b[s][self.pi[s]] += 1 - eps
+        nums = [np.zeros(len(self.actions[s])) for s in range(self.size)]
+        returns = [[[] for _ in self.actions[s]] for s in range(self.size)]
+        num = 0
+        for num in range(num_epsd // batch_size):
+            start_time = time.time()
+            for _ in range(batch_size):
+                seq = self.get_episode()
+                returns, nums = self.on_epsd(gamma, eps, seq, returns, nums)
+            end_time = time.time()
+            print(f"Episodes {num * batch_size} - {(num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
+            num += 1
+
+    def off_epsd(self, gamma, seq, c):
+        g = 0
+        ratio = 1
+        for step in reversed(seq):
+            s, a, reward = step
+            g = reward + gamma * g
+            c[s][a] += ratio
+            self.q[s][a] += ratio / c[s][a] * (g - self.q[s][a])
+            self.pi[s] = np.argmax(self.q[s])
+            if a != self.pi[s]:
+                return c
+            ratio *= 1 / self.b[s][a]
+        return c
+
+    def offpolicy(self, num_epsd, gamma, batch_size=10000):
+        self.b = [np.full(len(self.actions[s]), 1 / len(self.actions[s]))
+                  for s in range(self.size)]
+        c = [[0 for _ in self.actions[s]] for s in range(self.size)]
+        num = 0
+        for num in range(num_epsd // batch_size):
+            start_time = time.time()
+            for _ in range(batch_size):
+                seq = self.get_episode()
+                c = self.off_epsd(gamma, seq, c)
+            end_time = time.time()
+            print(f"Episodes {num * batch_size} - {(num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
+            num += 1
+    
     def _load_convert(self):
         self.pi = np.array(self.pi)
     
