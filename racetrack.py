@@ -1,6 +1,7 @@
 from agents import *
 import pygame
 from pygame.locals import *
+import racetrack_utils
 
 
 class Car:
@@ -28,15 +29,11 @@ class Square:
 class Racetrack(MCAgent):
     def __init__(self, track, start, finish, max_spe):
         super().__init__()
-        self.config(['track', 'start', 'finish', 'max_spe', 'n'])
-        self.max_spe = max_spe
+        self.config(['track', 'start', 'finish', 'max_spe'])
         self.track = track
         self.start = start
         self.finish = finish
-        self.track_set = set(self.track)
-        self.start_set = set(self.start)
-        self.finish_set = set(self.finish)
-        self.W, self.H = np.array(self.track).max(axis=0) + 1
+        self.max_spe = max_spe
         self.core_init()
     
     def set_state_actions(self):
@@ -49,7 +46,19 @@ class Racetrack(MCAgent):
             xspe, yspe = state[2:]
             if xspe == 0 and yspe == 0:
                 self.actions[s].remove((0, 0))
+        self.track_set = set(self.track)
+        self.start_set = set(self.start)
+        self.finish_set = set(self.finish)
+        self.W, self.H = 0, 0
+        if self.track:
+            self.W, self.H = np.array(self.track).max(axis=0) + 1
     
+    def load_convert(self):
+        super().load_convert()
+        self.track = [tuple(x) for x in self.track]
+        self.start = [tuple(x) for x in self.start]
+        self.finish = [tuple(x) for x in self.finish]
+
     def get_episode(self):
         seq = []
         start_x, start_y = random.choice(self.start)
@@ -63,15 +72,18 @@ class Racetrack(MCAgent):
             xspe = max(-self.max_spe, min(self.max_spe, xspe + dx))
             yspe = max(-self.max_spe, min(self.max_spe, yspe + dy))
             oldx, oldy = x, y
-            x = max(0, min(self.W - 1, x + xspe))
-            y = max(0, min(self.H - 1, y + yspe))
+            x += xspe
+            y += yspe
             if (x, y) not in self.track_set:
-                state = self.reset()
-            else:
-                state = (x, y, xspe, yspe)
+                # x, y, xspe, yspe = oldx, oldy, xspe, yspe
+                x, y, xspe, yspe = self.reset()
+            state = (x, y, xspe, yspe)
             reward = -1
             seq.append((s, a, reward))
             # print(state)
+        # x, y = state[:2]
+        # if (x, y) in self.finish_set:
+        #     print("found solution pog")
         return seq
     
     def reset(self):
@@ -115,17 +127,18 @@ class Racetrack(MCAgent):
                 state = (x, y, xspe, yspe)
             else:
                 s = self.state_to_index(state)
+                # dx, dy = self.actions[s][self.get_action(s)]
                 dx, dy = self.actions[s][self.pi[s]]
                 # dx, dy = 0, 0
                 xspe = max(-self.max_spe, min(self.max_spe, xspe + dx))
                 yspe = max(-self.max_spe, min(self.max_spe, yspe + dy))
                 oldx, oldy = x, y
-                x = max(0, min(self.W - 1, x + xspe))
-                y = max(0, min(self.H - 1, y + yspe))
+                x += xspe
+                y += yspe
                 if (x, y) not in self.track_set:
-                    state = self.reset()
-                else:
-                    state = (x, y, xspe, yspe)
+                    # x, y, xspe, yspe = oldx, oldy, xspe, yspe
+                    x, y, xspe, yspe = self.reset()
+                state = (x, y, xspe, yspe)
             car.update(x, y)
             for square in squares:
                 screen.blit(square.image, square.rect)
@@ -143,28 +156,30 @@ def create_track(w, h):
         track.append((w - 1, y))
     for x in range(w):
         track.append((x, h - 1))
-    for x in range(4, 8):
-        for y in range(10):
+    for x in range(4, 10):
+        for y in range(14):
             track.append((x, y))
         start.append((x, 0))
-    for x in range(12, 16):
-        for y in range(10):
+    for x in range(18, 24):
+        for y in range(14):
             track.append((x, y))
         finish.append((x, 0))
-    for y in range(6, 10):
-        for x in range(8, 12):
+    for y in range(7, 14):
+        for x in range(10, 18):
             track.append((x, y))
         # finish.append((w - 1, y))
     return track, start, finish
 
 SIZE = 20
-W = 20
-H = 20
-track, start, finish = create_track(W, H)
+W = 30
+H = 30
+track, start, finish = racetrack_utils.get_track()
 pro = Racetrack(track, start, finish, 3)
-init_pi = [5 for _ in pro.states]
-pro.train('onpolicy', 1000, eps=0.5, pi=init_pi, batch_size=100)
-# pro.train('offpolicy', 50000, batch_size=1000)
-pro.animate(4)
+# init_pi = [random.randint(0, len(pro.actions[s])-1) for s in range(pro.size)]
+pro.load('racetrack/prototypeB')
+# pro.train('onpolicy', 10000, eps=0.05, batch_size=1)
+pro.train('offpolicy', 100000, batch_size=1)
+pro.save('racetrack/prototypeC')
+pro.animate(15)
 # print([pro.actions[s][pro.pi[s]] for s in range(pro.size)])
 # print(pro.q)
