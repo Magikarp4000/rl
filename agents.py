@@ -270,11 +270,10 @@ class MCAgent(Agent):
             g = reward + gamma * g
             c[s][a] += w
             self.q[s][a] += w / c[s][a] * (g - self.q[s][a])
+            self.pi[s] = int(np.argmax(self.q[s]))
             if a != self.pi[s]:
                 break
             w *= 1 / self.b[s][a]
-        for s in visited:
-            self.pi[s] = int(np.argmax(self.q[s]))
         self.update_b(eps, visited)
         return c
     
