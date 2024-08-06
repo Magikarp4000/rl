@@ -1,10 +1,10 @@
-Basic reinforcement learning package
+**Basic reinforcement learning package**
 
-Algorithms:
+**Algorithms:**
 - DP (policy & value iteration)
 - Monte Carlo (on-policy & off-policy)
 
-Examples:
+**Examples:**
 - K-bandits
 - Car rentals
 - Gambler
