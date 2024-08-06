@@ -34,7 +34,7 @@ class Agent(ABC):
         for val in reversed(data):
             self._metadata.update({val: data[val]})
 
-    def load(self, file_name=None):
+    def load(self, file_name, load_actions=False):
         to_load = data_transfer.load(file_name)
         for name in to_load:
             if name == 'metadata':
@@ -43,9 +43,13 @@ class Agent(ABC):
                 setattr(self, name, to_load[name])
         self.load_convert()
         self.core_init()
+        # if 'states' in to_load:
+        #     self.states = [tuple(x) for x in to_load['states']]
+        if load_actions and 'actions' in to_load:
+            self.actions = [[tuple(x) for x in state] for state in to_load['actions']]
         print(f'Loaded {file_name}.json!')
     
-    def save(self, file_name=None):
+    def save(self, file_name):
         self.save_convert()
         to_save = {'metadata': self._metadata}
         for val in self._data:
@@ -186,30 +190,27 @@ class DPAgent(Agent):
 class MCAgent(Agent):
     def __init__(self):
         super().__init__()
-        self.config(['q', 'pi', 'q_record', 'pi_record'])
+        self.config(['q', 'pi', 'b', 'q_record', 'pi_record'])
         self.q = [[]]
         self.pi = []
         self.q_record = []
         self.pi_record = []
         self.b = []
     
-    def train(self, algo, num_epsd, gamma=1, eps=0.1, q=None, pi=None, batch_size=1, save_params=True, save_time=True):
+    def train(self, algo, num_ep, gamma=1, eps=1.0, randomise=True, q=None, pi=None, batch_size=1, save_params=True, save_time=True):
         if save_params:
-            self.config_meta({'algo': algo, 'num_epsd': num_epsd, 'gamma': gamma, 'eps': eps})
-        if q:
-            self.q = q
-        else:
-            self.q = [[0 for _ in self.actions[s]] for s in range(self.size)]
-        if pi:
-            self.pi = pi
-        else:
-            self.pi = [random_argmax(self.q[s]) for s in range(self.size)]
+            self.config_meta({'algo': algo, 'num_ep': num_ep, 'gamma': gamma, 'eps': eps})
+        self.q = q if q else  [[0 for _ in self.actions[s]] for s in range(self.size)]
+        self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size)]
         self.q_record.clear()
         self.pi_record.clear()
+        if randomise:
+            for s in range(self.size):
+                random.shuffle(self.actions[s])
         if algo == 'onpolicy':
-            self.onpolicy(num_epsd, gamma, eps, batch_size)
+            self.on_policy(num_ep, gamma, eps, batch_size)
         elif algo == 'offpolicy':
-            self.offpolicy(num_epsd, gamma, batch_size)
+            self.off_policy(num_ep, gamma, batch_size, eps)
         else:
             print("Invalid algorithm mate")
         if save_time:
@@ -218,91 +219,85 @@ class MCAgent(Agent):
     def get_action(self, s):
         return np.random.choice(len(self.actions[s]), p=self.b[s])
     
-    def on_epsd(self, gamma, eps, seq, nums):
+    def on_policy(self, num_ep, gamma, eps, batch_size):
+        self.update_b(eps)
+        nums = [np.zeros(len(self.actions[s])) for s in range(self.size)]
+        ep_num = 0
+        for ep_num in range(num_ep // batch_size):
+            start_time = time.time()
+            for _ in range(batch_size):
+                seq = self.get_episode()
+                nums = self.on_ep(gamma, eps, seq, nums)
+            end_time = time.time()
+            print(f"Episodes {ep_num * batch_size} - {(ep_num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
+            ep_num += 1
+    
+    def on_ep(self, gamma, eps, seq, nums):
         visited = set()
         g = 0
         for step in reversed(seq):
             s, a, reward = step
+            visited.add(s)
             g = reward + gamma * g
             temp = nums[s][a] if nums[s][a] else 1
             self.q[s][a] += 1 / temp * (g - self.q[s][a])
             nums[s][a] += 1
-            visited.add(s)
         for s in visited:
-            old_pi = self.pi[s]
             self.pi[s] = random_argmax(self.q[s])
-            # self.b[s] = np.full(len(self.actions[s]), eps / len(self.actions[s]))
-            # self.b[s][self.pi[s]] += 1 - eps
-            self.b[s][old_pi] = eps / len(self.actions[s])
-            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+        self.update_b(eps, visited)
         return nums
-
-    def onpolicy(self, num_epsd, gamma, eps, batch_size):
-        self.b = [np.full(len(self.actions[s]), eps / len(self.actions[s]))
-                  for s in range(self.size)]
-        for s in range(self.size):
-            self.b[s][self.pi[s]] += 1 - eps
-        nums = [np.zeros(len(self.actions[s])) for s in range(self.size)]
-        num = 0
-        real_num = 0
-        for num in range(num_epsd // batch_size):
+    
+    def off_policy(self, num_ep, gamma, batch_size, eps):
+        self.update_b(eps)
+        c = [np.zeros(len(self.actions[s])) for s in range(self.size)]
+        ep_num = 0
+        for ep_num in range(num_ep // batch_size):
             start_time = time.time()
             for _ in range(batch_size):
-                real_num += 1
                 seq = self.get_episode()
-                # eps = max(0.1, min(1, 1 / np.sqrt(real_num)))
-                nums = self.on_epsd(gamma, eps, seq, nums)
+                c = self.off_ep(gamma, seq, c, eps)
             end_time = time.time()
-            print(f"Episodes {num * batch_size} - {(num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
-            num += 1
-
-    def off_epsd(self, gamma, seq, c):
-        eps = 0.1
+            print(f"Episodes {ep_num * batch_size} - {(ep_num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
+            ep_num += 1
+    
+    def off_ep(self, gamma, seq, c, eps):
         visited = set()
         g = 0
-        ratio = 1
+        w = 1
         for step in reversed(seq):
             s, a, reward = step
             visited.add(s)
             g = reward + gamma * g
-            c[s][a] += ratio
-            self.q[s][a] += ratio / c[s][a] * (g - self.q[s][a])
-            self.pi[s] = np.argmax(self.q[s])
+            c[s][a] += w
+            self.q[s][a] += w / c[s][a] * (g - self.q[s][a])
             if a != self.pi[s]:
-                for t in visited:
-                    self.b[t] = np.full(len(self.actions[t]), eps / len(self.actions[t]))
-                    self.b[t][self.pi[t]] += 1 - eps
-                return c
-            ratio *= 1 / self.b[s][a]
+                break
+            w *= 1 / self.b[s][a]
         for s in visited:
-            self.b[s] = np.full(len(self.actions[s]), eps / len(self.actions[s]))
-            self.b[s][self.pi[s]] += 1 - eps
+            self.pi[s] = int(np.argmax(self.q[s]))
+        self.update_b(eps, visited)
         return c
-
-    def offpolicy(self, num_epsd, gamma, batch_size):
-        eps = 0.1
-        self.b = [np.full(len(self.actions[s]), eps / len(self.actions[s]))
-                  for s in range(self.size)]
-        for s in range(self.size):
-            self.b[s][self.pi[s]] += 1 - eps
-        # self.b = [np.full(len(self.actions[s]), 1 / len(self.actions[s]))
-        #           for s in range(self.size)]
-        c = [[0 for _ in self.actions[s]] for s in range(self.size)]
-        num = 0
-        for num in range(num_epsd // batch_size):
-            start_time = time.time()
-            for _ in range(batch_size):
-                seq = self.get_episode()
-                c = self.off_epsd(gamma, seq, c)
-            end_time = time.time()
-            print(f"Episodes {num * batch_size} - {(num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
-            num += 1
+    
+    def update_b(self, eps, to_update=None):
+        if to_update is None:
+            to_update = [i for i in range(self.size)]
+        for s in to_update:
+            self.b[s] = np.full(len(self.actions[s]), eps / len(self.actions[s]))
+            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
     
     def load_convert(self):
-        pass
+        for s in range(self.size):
+            try:
+                self.b[s] = np.array(self.b[s])
+            except:
+                pass
     
     def save_convert(self):
-        pass
+        for s in range(self.size):
+            try:
+                self.b[s] = self.b[s].tolist()
+            except:
+                pass
 
     def display(self, display_type):
         pass
