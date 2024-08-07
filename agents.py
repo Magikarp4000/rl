@@ -6,7 +6,7 @@ import data_transfer
 
 
 class Agent(ABC):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self._data = []
         self._metadata = {}
         self.states = []
@@ -14,8 +14,8 @@ class Agent(ABC):
         self.size = 0
         self.state_map = {}
     
-    def core_init(self):
-        self.set_state_actions()
+    def core_init(self, *args, **kwargs):
+        self.set_state_actions(*args, **kwargs)
         self.size = len(self.states)
         self.state_map = {self.states[s]: s for s in range(self.size)}
 
@@ -43,8 +43,6 @@ class Agent(ABC):
                 setattr(self, name, to_load[name])
         self.load_convert()
         self.core_init()
-        # if 'states' in to_load:
-        #     self.states = [tuple(x) for x in to_load['states']]
         if load_actions and 'actions' in to_load:
             self.actions = [[tuple(x) for x in state] for state in to_load['actions']]
         print(f'Loaded {file_name}.json!')
@@ -65,13 +63,16 @@ class Agent(ABC):
     def save_convert(self):
         pass
 
+    def get_action(self, s):
+        pass
+
     @abstractmethod
     def set_state_actions(self):
         pass
 
 
 class DPAgent(Agent):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
         self.config(['v', 'pi', 'v_record', 'pi_record'])
         self.v = np.array([])
@@ -188,29 +189,32 @@ class DPAgent(Agent):
 
 
 class MCAgent(Agent):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
-        self.config(['q', 'pi', 'b', 'q_record', 'pi_record'])
+        self.config(['q', 'pi', 'b'])
         self.q = [[]]
         self.pi = []
-        self.q_record = []
-        self.pi_record = []
         self.b = []
     
-    def train(self, algo, num_ep, gamma=1, eps=1.0, randomise=True, q=None, pi=None, batch_size=1, save_params=True, save_time=True):
-        if save_params:
-            self.config_meta({'algo': algo, 'num_ep': num_ep, 'gamma': gamma, 'eps': eps})
-        self.q = q if q else  [[0 for _ in self.actions[s]] for s in range(self.size)]
-        self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size)]
-        self.q_record.clear()
-        self.pi_record.clear()
-        if randomise:
+    def init_train(self, eps, rand_actions, q, pi):
+        if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
+        self.q = q if q else [[random.random() for _ in self.actions[s]] for s in range(self.size)]
+        self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size)]
+        self.b = [np.full(len(self.actions[s]), eps / len(self.actions[s]))
+                  for s in range(self.size)]
+        for s in range(self.size):
+            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+
+    def train(self, algo, num_ep, gamma=1, eps=0.1, sampling_type='weighted', rand_actions=True, q=None, pi=None, batch_size=1, save_params=True, save_time=True):
+        self.init_train(eps, rand_actions, q, pi)
+        if save_params:
+            self.config_meta({'algo': algo, 'num_ep': num_ep, 'gamma': gamma, 'eps': eps})
         if algo == 'onpolicy':
             self.on_policy(num_ep, gamma, eps, batch_size)
         elif algo == 'offpolicy':
-            self.off_policy(num_ep, gamma, batch_size, eps)
+            self.off_policy(num_ep, gamma, eps, sampling_type, batch_size)
         else:
             print("Invalid algorithm mate")
         if save_time:
@@ -220,17 +224,16 @@ class MCAgent(Agent):
         return np.random.choice(len(self.actions[s]), p=self.b[s])
     
     def on_policy(self, num_ep, gamma, eps, batch_size):
-        self.update_b(eps)
         nums = [np.zeros(len(self.actions[s])) for s in range(self.size)]
-        ep_num = 0
-        for ep_num in range(num_ep // batch_size):
+        ep = 0
+        for _ in range(num_ep // batch_size):
             start_time = time.time()
             for _ in range(batch_size):
                 seq = self.get_episode()
                 nums = self.on_ep(gamma, eps, seq, nums)
+                ep += 1
             end_time = time.time()
-            print(f"Episodes {ep_num * batch_size} - {(ep_num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
-            ep_num += 1
+            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
     
     def on_ep(self, gamma, eps, seq, nums):
         visited = set()
@@ -247,20 +250,19 @@ class MCAgent(Agent):
         self.update_b(eps, visited)
         return nums
     
-    def off_policy(self, num_ep, gamma, batch_size, eps):
-        self.update_b(eps)
+    def off_policy(self, num_ep, gamma, eps, sampling_type, batch_size):
         c = [np.zeros(len(self.actions[s])) for s in range(self.size)]
         ep_num = 0
         for ep_num in range(num_ep // batch_size):
             start_time = time.time()
             for _ in range(batch_size):
                 seq = self.get_episode()
-                c = self.off_ep(gamma, seq, c, eps)
+                c = self.off_ep(gamma, eps, sampling_type, seq, c)
             end_time = time.time()
             print(f"Episodes {ep_num * batch_size} - {(ep_num + 1) * batch_size} complete in {round(end_time - start_time, 2)}s.")
             ep_num += 1
     
-    def off_ep(self, gamma, seq, c, eps):
+    def off_ep(self, gamma, eps, sampling_type, seq, c):
         visited = set()
         g = 0
         w = 1
@@ -303,6 +305,72 @@ class MCAgent(Agent):
 
     @abstractmethod
     def get_episode(self):
+        pass
+
+
+class TDAgent(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.config(['q', 'pi', 'b'])
+        self.q = []
+        self.pi = []
+        self.b = []
+
+    def get_action(self, s, eps=None):
+        if eps:
+            if random.random() < eps:
+                return random.randint(0, len(self.actions[s]) - 1)
+            return self.pi[s]
+        return np.random.choice(len(self.actions[s]), p=self.b[s])
+    
+    def init_train(self, eps, rand_actions, q, pi):
+        if rand_actions:
+            for s in range(self.size):
+                random.shuffle(self.actions[s])
+        self.q = q if q else [[random.random() for _ in self.actions[s]] for s in range(self.size + 1)]
+        self.q[self.size][0] = 0
+        self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size + 1)]
+        self.b = [[eps / len(self.actions[s]) for _ in self.actions[s]]
+                  for s in range(self.size + 1)]
+        for s in range(self.size + 1):
+            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+
+    def update_b(self, eps, to_update=None):
+        if to_update is None:
+            to_update = [i for i in range(self.size)]
+        for s in to_update:
+            self.b[s] = [eps / len(self.actions[s]) for _ in self.actions[s]]
+            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+
+    def train(self, num_ep, gamma=1, alpha=0.1, eps=0.1, rand_actions=True, batch_size=1, q=None, pi=None):
+        self.init_train(eps, rand_actions, q, pi)
+        ep = 0
+        for _ in range(num_ep // batch_size):
+            start_time = time.time()
+            for _ in range(batch_size):
+                self.episode(gamma, alpha, eps)
+                ep += 1
+            end_time = time.time()
+            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+    
+    def episode(self, gamma, alpha, eps):
+        visited = set()
+        s = random.randint(0, self.size - 1)
+        a = self.get_action(s)
+        while s < self.size:
+            visited.add(s)
+            new_s, reward = self.next_state(s, a)
+            new_a = self.get_action(new_s, eps)
+            self.q[s][a] += alpha * (reward + gamma * self.q[new_s][new_a] - self.q[s][a])
+            self.pi[s] = int(np.argmax(self.q[s]))
+            s, a = new_s, new_a
+        self.update_b(eps, visited)
+    
+    def display(self, display_type):
+        pass
+
+    @abstractmethod
+    def next_state(self):
         pass
 
 
