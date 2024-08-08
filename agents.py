@@ -200,6 +200,7 @@ class MCAgent(Agent):
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
+            self.config(['actions'])
         self.q = q if q else [[random.random() for _ in self.actions[s]] for s in range(self.size)]
         self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size)]
         self.b = [np.full(len(self.actions[s]), eps / len(self.actions[s]))
@@ -210,7 +211,7 @@ class MCAgent(Agent):
     def train(self, algo, num_ep, gamma=1, eps=0.1, sampling_type='weighted', rand_actions=True, q=None, pi=None, batch_size=1, save_params=True, save_time=True):
         self.init_train(eps, rand_actions, q, pi)
         if save_params:
-            self.config_meta({'algo': algo, 'num_ep': num_ep, 'gamma': gamma, 'eps': eps})
+            self.config_meta({'algo': algo, 'num_ep': num_ep, 'gamma': gamma, 'eps': eps, 'sampling_type': sampling_type})
         if algo == 'onpolicy':
             self.on_policy(num_ep, gamma, eps, batch_size)
         elif algo == 'offpolicy':
@@ -316,24 +317,25 @@ class TDAgent(Agent):
         self.pi = []
         self.b = []
 
-    def get_action(self, s, eps=None):
-        if eps:
-            if random.random() < eps:
-                return random.randint(0, len(self.actions[s]) - 1)
-            return self.pi[s]
-        return np.random.choice(len(self.actions[s]), p=self.b[s])
-    
     def init_train(self, eps, rand_actions, q, pi):
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
-        self.q = q if q else [[random.random() for _ in self.actions[s]] for s in range(self.size + 1)]
+            self.config(['actions'])
+        self.q = q if q else [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         self.q[self.size][0] = 0
         self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size + 1)]
         self.b = [[eps / len(self.actions[s]) for _ in self.actions[s]]
                   for s in range(self.size + 1)]
         for s in range(self.size + 1):
             self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+    
+    def get_action(self, s, eps=None):
+        if eps:
+            if random.random() < eps:
+                return random.randint(0, len(self.actions[s]) - 1)
+            return self.pi[s]
+        return np.random.choice(len(self.actions[s]), p=self.b[s])
 
     def update_b(self, eps, to_update=None):
         if to_update is None:
@@ -342,18 +344,25 @@ class TDAgent(Agent):
             self.b[s] = [eps / len(self.actions[s]) for _ in self.actions[s]]
             self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
 
-    def train(self, num_ep, gamma=1, alpha=0.1, eps=0.1, rand_actions=True, batch_size=1, q=None, pi=None):
+    def train(self, algo, num_ep, gamma=1, alpha=0.1, eps=0.1, rand_actions=True, batch_size=1, q=None, pi=None, save_params=True, save_time=True):
         self.init_train(eps, rand_actions, q, pi)
+        if save_params:
+            self.config_meta({'algo': algo, 'num_ep': num_ep, 'gamma': gamma, 'alpha': alpha, 'eps': eps})
         ep = 0
-        for _ in range(num_ep // batch_size):
+        while ep < num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                self.episode(gamma, alpha, eps)
+                if algo == 'onpolicy':
+                    self.onpolicy_ep(gamma, alpha, eps)
+                elif algo == 'qlearn':
+                    self.qlearn_ep(gamma, alpha, eps)
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
-    
-    def episode(self, gamma, alpha, eps):
+        if save_time:
+            self.config_meta({'time': str(datetime.datetime.now())})
+
+    def onpolicy_ep(self, gamma, alpha, eps):
         visited = set()
         s = random.randint(0, self.size - 1)
         a = self.get_action(s)
@@ -362,6 +371,19 @@ class TDAgent(Agent):
             new_s, reward = self.next_state(s, a)
             new_a = self.get_action(new_s, eps)
             self.q[s][a] += alpha * (reward + gamma * self.q[new_s][new_a] - self.q[s][a])
+            self.pi[s] = int(np.argmax(self.q[s]))
+            s, a = new_s, new_a
+        self.update_b(eps, visited)
+    
+    def qlearn_ep(self, gamma, alpha, eps):
+        visited = set()
+        s = random.randint(0, self.size - 1)
+        a = self.get_action(s)
+        while s < self.size:
+            visited.add(s)
+            new_s, reward = self.next_state(s, a)
+            new_a = self.get_action(new_s, eps)
+            self.q[s][a] += alpha * (reward + gamma * max(self.q[new_s]) - self.q[s][a])
             self.pi[s] = int(np.argmax(self.q[s]))
             s, a = new_s, new_a
         self.update_b(eps, visited)
