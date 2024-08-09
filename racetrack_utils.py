@@ -8,7 +8,7 @@ from pygame.locals import *
 
 WIDTH = 900
 HEIGHT = 550
-SIZE = 15
+SIZE = 5
 X = WIDTH // SIZE
 Y = HEIGHT // SIZE
 FPS = 60
@@ -37,13 +37,13 @@ class _GUISquare:
         self.y = y
         self.state = 'empty'
     
-    def update(self, mouse_state, left_down, right_down):
-        x, y = _normalise(pygame.mouse.get_pos())
-        if (x, y) == (self.x, self.y):
-            if left_down:
-                self.state = mouse_state
-            elif right_down:
-                self.state = 'empty'
+    def _update(self, mouse_state, left_down, right_down):
+        if left_down:
+            self.state = mouse_state
+        elif right_down:
+            self.state = 'empty'
+    
+    def update(self, *args, **kwargs):
         self.image.fill(STATE_COLOURS[self.state])
     
     def reset(self):
@@ -55,7 +55,7 @@ class _CursorSquare():
         self.image = pygame.Surface((SIZE, SIZE))
         self.rect = self.image.get_rect()
     
-    def update(self, mouse_state, *args):
+    def update(self, mouse_state, *args, **kwargs):
         x, y = _normalise(pygame.mouse.get_pos())
         self.rect = self.image.get_rect(center=(x * SIZE + SIZE / 2, y * SIZE + SIZE / 2))
         self.image.fill(MOUSE_COLOURS[mouse_state])
@@ -86,7 +86,7 @@ class Square:
 class Racetrack(agents.Agent):
     def __init__(self, track, start, finish, max_spe):
         super().__init__()
-        self.config(['actions', 'track', 'start', 'finish', 'max_spe'])
+        self.config(['track', 'start', 'finish', 'max_spe'])
         self.track = track
         self.start = start
         self.finish = finish
@@ -97,6 +97,7 @@ class Racetrack(agents.Agent):
         self.track_set = set(self.track)
         self.start_set = set(self.start)
         self.finish_set = set(self.finish)
+        self.starts = [(x, y, 0, 0) for x, y in self.start]
         self.states = [(x, y, xspe, yspe) for x, y in self.track
                        for xspe in range(-self.max_spe, self.max_spe + 1)
                        for yspe in range(-self.max_spe, self.max_spe + 1)]
@@ -228,14 +229,47 @@ def _reset(sprites):
             sprite.reset()
     return sprites
 
+def _get_squares(sprites):
+    squares = []
+    for sprite in sprites.values():
+        if isinstance(sprite, _GUISquare):
+            squares.append(sprite)
+    return squares
+
+def _get_squares_dict(sprites):
+    return {(sq.x, sq.y): sq for sq in _get_squares(sprites)}
+
+def _bfs(start, squares, mouse_state):
+    delta_x = [0, 0, 1, -1]
+    delta_y = [1, -1, 0, 0]
+    queue = deque()
+    visited = {(x, y): False for x in range(X) for y in range(Y)}
+    queue.append(start)
+    while queue:
+        x, y = queue.popleft()
+        if (x, y) not in visited or visited[x, y]:
+            continue
+        visited[x, y] = True
+        for dx, dy in zip(delta_x, delta_y):
+            nx = x + dx
+            ny = y + dy
+            if (nx, ny) in visited and squares[nx, ny].state == squares[start].state:
+                queue.append((nx, ny))
+    visited_list = []
+    for pos in visited:
+        if visited[pos]:
+            visited_list.append(pos)
+    return visited_list
+
 def _gui():
     pygame.init()
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((X * SIZE, Y * SIZE))
-    sprites = [_GUISquare(x, y) for x in range(X) for y in range(Y)]
-    sprites.append(_CursorSquare())
+    sprites = {(x, y): _GUISquare(x, y) for x in range(X) for y in range(Y)}
+    sprites.update({'cursor': _CursorSquare()})
     left_down, right_down = False, False
     mouse_state = 'track'
+    mouse_action = 'brush'
     running = True
     while running:
         for event in pygame.event.get():
@@ -246,13 +280,14 @@ def _gui():
                     running = False
                 if event.key == K_SPACE:
                     sprites = _reset(sprites)
-            if event.type == KEYDOWN:
                 if event.key == K_1:
                     mouse_state = 'track'
                 elif event.key == K_2:
                     mouse_state = 'start'
                 elif event.key == K_3:
                     mouse_state = 'finish'
+                if event.key == K_f:
+                    mouse_action = 'brush' if mouse_action == 'fill' else 'fill'
             if event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:
                     left_down = True
@@ -263,18 +298,23 @@ def _gui():
                     left_down = False
                 elif event.button == 3:
                     right_down = False
-        for sprite in sprites:
-            sprite.update(mouse_state, left_down, right_down)
-        for sprite in sprites:
+        # Update state
+        x, y = _normalise(pygame.mouse.get_pos())
+        to_update = [(x, y)]
+        if mouse_action == 'fill':
+            to_update = _bfs((x, y), _get_squares_dict(sprites), mouse_state)
+        for pos in to_update:
+            if pos in sprites:
+                sprites[pos]._update(mouse_state, left_down, right_down)
+        # Update graphics
+        for sprite in sprites.values():
+            sprite.update(mouse_state)
+        for sprite in sprites.values():
             screen.blit(sprite.image, sprite.rect)
         pygame.display.flip()
         clock.tick(FPS)
     pygame.quit()
-    squares = []
-    for sprite in sprites:
-        if isinstance(sprite, _GUISquare):
-            squares.append(sprite)
-    return squares
+    return _get_squares(sprites)
 
 def get_track():
     squares = _gui()
