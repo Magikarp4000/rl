@@ -3,7 +3,7 @@
 **Algorithms:**
 - DP (policy & value iteration)
 - Monte Carlo (on-policy & off-policy)
-- TD (SARSA, q-learning, expected SARSA, double q-learning)
+- TD (n-step SARSA, q-learning, expected SARSA, double q-learning)
 
 **Examples:**
 - K-bandits
