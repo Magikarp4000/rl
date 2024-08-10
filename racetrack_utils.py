@@ -175,6 +175,7 @@ class Racetrack(agents.Agent):
                     _type = 'track'
                 squares.append(Square(x, y, _type))
         wins = 0
+        num_actions = 0
         running = True
         while running:
             for event in pygame.event.get():
@@ -185,13 +186,15 @@ class Racetrack(agents.Agent):
                         running = False
                     if event.key == K_SPACE:
                         state = self.reset()
+                        num_actions = 0
             x, y, xspe, yspe = state
             if (x, y) in self.finish_set:
                 wins += 1
-                print(f"Wins: {wins}")
+                print(f"Wins: {wins}    Num actions: {num_actions}")
                 x, y = random.choice(self.start)
                 xspe = yspe = 0
                 state = (x, y, xspe, yspe)
+                num_actions = 0
             else:
                 s = self.state_to_index(state)
                 dx, dy = self.actions[s][self.pi[s]]
@@ -210,6 +213,7 @@ class Racetrack(agents.Agent):
                     else:
                         x, y, xspe, yspe = self.reset()
                 state = (x, y, xspe, yspe)
+                num_actions += 1
             car.update(x, y)
             for square in squares:
                 screen.blit(square.image, square.rect)
