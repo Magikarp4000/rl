@@ -354,7 +354,9 @@ class TDAgent(Agent):
             for _ in range(batch_size):
                 init_s, init_a = self.init_ep(explore_starts)
                 if algo == 'sarsa':
-                    self.sarsa_ep(init_s, init_a, n, gamma, alpha, eps)
+                    self.sarsa_ep(init_s, init_a, n, 'onpolicy', gamma, alpha, eps)
+                elif algo == 'offsarsa':
+                    self.sarsa_ep(init_s, init_a, n, 'offpolicy', gamma, alpha, eps)
                 elif algo == 'qlearn':
                     self.qlearn_ep(init_s, init_a, gamma, alpha, eps)
                 elif algo == 'expsarsa':
@@ -374,14 +376,12 @@ class TDAgent(Agent):
         a = self.get_action(s)
         return s, a
 
-    def sarsa_ep(self, s, a, n, gamma, alpha, eps):
-        visited = set()
+    def sarsa_ep(self, s, a, n, policy_type, gamma, alpha, eps):
         cache = [(0, 0, 0) for _ in range(n+1)]   # (state, action, reward)
         T = np.inf
         step = 0
         while step - n + 1 < T:
             if step < T:
-                visited.add(s)
                 new_s, reward = self.next_state(s, a)
                 if new_s >= self.size:
                     T = step + 1
@@ -397,12 +397,20 @@ class TDAgent(Agent):
                 if step + 1 < T:
                     end_s, end_a = cache[(step+1) % (n+1)][:2]
                     g += cur_gamma * self.q[end_s][end_a]
+                rho = 1
+                if policy_type == 'offpolicy':
+                    for i in range(prev + 1, min(step + 1, T)):
+                        cur_s, cur_a = cache[i % (n+1)][:2]
+                        if cur_a == self.pi[cur_s]:
+                            rho *= 1 / self.b[cur_s][cur_a]
+                        else:
+                            rho = 0
                 prev_s, prev_a = cache[prev % (n+1)][:2]
-                self.q[prev_s][prev_a] += alpha * (g - self.q[prev_s][prev_a])
-                self.pi[prev_s] = random_argmax(self.q[prev_s])
+                self.q[prev_s][prev_a] += alpha * rho * (g - self.q[prev_s][prev_a])
+                self.pi[prev_s] = int(np.argmax(self.q[prev_s]))
+                self.update_b(eps, [prev_s])
             s, a = new_s, new_a
             step += 1
-        self.update_b(eps, visited)
     
     def qlearn_ep(self, s, a, gamma, alpha, eps):
         visited = set()
