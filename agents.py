@@ -352,17 +352,12 @@ class TDAgent(Agent):
         while ep < num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                init_s, init_a = self.init_ep(explore_starts)
-                if algo == 'sarsa':
-                    self.sarsa_ep(init_s, init_a, n, 'onpolicy', gamma, alpha, eps)
-                elif algo == 'offsarsa':
-                    self.sarsa_ep(init_s, init_a, n, 'offpolicy', gamma, alpha, eps)
+                if algo in ['sarsa', 'offsarsa', 'expsarsa', 'expoffsarsa']:
+                    self.sarsa_ep(algo, n, gamma, alpha, eps, explore_starts)
                 elif algo == 'qlearn':
-                    self.qlearn_ep(init_s, init_a, gamma, alpha, eps)
-                elif algo == 'expsarsa':
-                    self.expected_sarsa_ep(init_s, init_a, gamma, alpha, eps)
+                    self.qlearn_ep(gamma, alpha, eps, explore_starts)
                 elif algo == 'dqlearn':
-                    self.double_qlearn_ep(init_s, init_a, gamma, alpha, eps)
+                    self.double_qlearn_ep(gamma, alpha, eps, explore_starts)
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
@@ -376,77 +371,104 @@ class TDAgent(Agent):
         a = self.get_action(s)
         return s, a
 
-    def sarsa_ep(self, s, a, n, policy_type, gamma, alpha, eps):
-        cache = [(0, 0, 0) for _ in range(n+1)]   # (state, action, reward)
+    def sarsa_ep(self, algo, n, gamma, alpha, eps, explore_starts):
+        s, a = self.init_ep(explore_starts)
+        cache = [(0, 0, 0) for _ in range(n + 1)]   # (state, action, reward)
         T = np.inf
-        step = 0
-        while step - n + 1 < T:
-            if step < T:
+        t = 0
+        while t < T + n - 1:
+            if t < T:
+                # get state, reward at step t+1
                 new_s, reward = self.next_state(s, a)
+                # check if terminal state
                 if new_s >= self.size:
-                    T = step + 1
+                    T = t + 1
+                # get action at step t+1
                 new_a = self.get_action(new_s, eps)
-                cache[(step+1) % (n+1)] = (new_s, new_a, reward)
-            prev = step - n + 1
+                # store state, action, reward at step t+1
+                cache[(t + 1) % (n + 1)] = (new_s, new_a, reward)
+            # update step t-n+1 with return from steps t-n+1:t+1
+            prev = t - n + 1
             if prev >= 0:
-                g = 0
-                cur_gamma = 1
-                for i in range(min(n, T - prev)):
-                    g += cur_gamma * cache[i % (n+1)][2]
-                    cur_gamma *= gamma
-                if step + 1 < T:
-                    end_s, end_a = cache[(step+1) % (n+1)][:2]
-                    g += cur_gamma * self.q[end_s][end_a]
-                rho = 1
-                if policy_type == 'offpolicy':
-                    for i in range(prev + 1, min(step + 1, T)):
-                        cur_s, cur_a = cache[i % (n+1)][:2]
-                        if cur_a == self.pi[cur_s]:
-                            rho *= 1 / self.b[cur_s][cur_a]
-                        else:
-                            rho = 0
-                prev_s, prev_a = cache[prev % (n+1)][:2]
-                self.q[prev_s][prev_a] += alpha * rho * (g - self.q[prev_s][prev_a])
+                ret = self.get_return(algo, gamma, prev, t, T, cache)
+                rho = self.get_importance_ratio(algo, prev, t, T, cache)
+                prev_s, prev_a = cache[prev % (n + 1)][:2]
+                # update step t-n+1
+                self.q[prev_s][prev_a] += alpha * rho * (ret - self.q[prev_s][prev_a])
                 self.pi[prev_s] = int(np.argmax(self.q[prev_s]))
                 self.update_b(eps, [prev_s])
             s, a = new_s, new_a
-            step += 1
+            t += 1
     
-    def qlearn_ep(self, s, a, gamma, alpha, eps):
-        visited = set()
-        while s < self.size:
-            visited.add(s)
-            new_s, reward = self.next_state(s, a)
-            new_a = self.get_action(new_s, eps)
-            self.q[s][a] += alpha * (reward + gamma * max(self.q[new_s]) - self.q[s][a])
-            self.pi[s] = random_argmax(self.q[s])
-            s, a = new_s, new_a
-        self.update_b(eps, visited)
-    
-    def expected_sarsa_ep(self, s, a, gamma, alpha, eps):
-        while s < self.size:
-            new_s, reward = self.next_state(s, a)
-            for new_a in range(len(self.actions[new_s])):
-                self.q[s][a] += alpha * (reward + gamma * self.b[new_s][new_a] * self.q[new_s][new_a] - self.q[s][a])
-            new_a = self.get_action(s, eps)
-            self.pi[s] = random_argmax(self.q[s])
-            self.update_b(eps, [s])
-            s, a = new_s, new_a
-    
-    def double_qlearn_ep(self, s, a, gamma, alpha, eps):
-        visited = set()
-        while s < self.size:
-            visited.add(s)
-            new_s, reward = self.next_state(s, a)
-            new_a = self.get_action(new_s, eps)
-            if random.randint(0, 1) == 0:
-                self.q1[s][a] += alpha * (reward + gamma * self.q2[new_s][random_argmax(self.q1[s])] - self.q[s][a])
+    def get_return(self, algo, gamma, prev, t, T, cache):
+        ret = 0
+        cur_gamma = 1
+        # prev+1 to min(t, T)
+        for i in range(prev + 1, min(t + 1, T + 1)):
+            ret += cur_gamma * cache[i % len(cache)][2] # reward
+            cur_gamma *= gamma
+        # t+1
+        if t + 1 < T:
+            end_s, end_a = cache[(t + 1) % len(cache)][:2]
+            if algo == 'expsarsa':
+                ret += cur_gamma * sum(prob * val for prob, val in zip(self.b[end_s], self.q[end_s]))
+            elif algo == 'expoffsarsa':
+                ret += cur_gamma * self.q[end_s][self.pi[end_s]]
+            elif algo == 'sarsa' or algo == 'offsarsa':
+                ret += cur_gamma * self.q[end_s][end_a]
+        return ret
+
+    def get_importance_ratio(self, algo, prev, t, T, cache):
+        if algo == 'sarsa' or algo == 'expsarsa':
+            return 1
+        rho = 1
+        # offsarsa: prev+1 to min(t, T-1)
+        # expoffsarsa: prev+1 to min(t-1, T-1)
+        _end = min(t, T) if algo == 'expoffsarsa' else min(t + 1, T)
+        for i in range(prev + 1, _end):
+            cur_s, cur_a = cache[i % len(cache)][:2] # state, action
+            if cur_a == self.pi[cur_s]:
+                rho *= 1 / self.b[cur_s][cur_a]
             else:
-                self.q2[s][a] += alpha * (reward + gamma * self.q1[new_s][random_argmax(self.q2[s])] - self.q[s][a])
-            self.q[s][a] = self.q1[s][a] + self.q2[s][a]
+                return 0
+        return rho
+
+    def qlearn_ep(self, gamma, alpha, eps, explore_starts):
+        s, a = self.init_ep(explore_starts)
+        visited = set()
+        while s < self.size:
+            visited.add(s)
+            new_s, reward = self.next_state(s, a)
+            new_a = self.get_action(new_s, eps)
+            ret = reward + gamma * max(self.q[new_s])
+            self._single_q_update(s, a, ret, alpha)
             self.pi[s] = random_argmax(self.q[s])
             s, a = new_s, new_a
         self.update_b(eps, visited)
+
+    def double_qlearn_ep(self, gamma, alpha, eps, explore_starts):
+        s, a = self.init_ep(explore_starts)
+        visited = set()
+        while s < self.size:
+            visited.add(s)
+            new_s, reward = self.next_state(s, a)
+            new_a = self.get_action(new_s, eps)
+            ret1 = reward + gamma * self.q2[new_s][random_argmax(self.q1[s])]
+            ret2 = reward + gamma * self.q1[new_s][random_argmax(self.q2[s])]
+            self._double_q_update(self, s, a, ret1, ret2, alpha)
+            self.pi[s] = random_argmax(self.q[s])
+            s, a = new_s, new_a
+        self.update_b(eps, visited)
+    
+    def _single_q_update(self, s, a, ret, alpha):
+        self.q[s][a] += alpha * (ret - self.q[s][a])
+
+    def _double_q_update(self, s, a, ret1, ret2, alpha):
+        if random.randint(0, 1) == 0:
+            self.q1[s][a] += alpha * (ret1 - self.q1[s][a])
+        else:
+            self.q2[s][a] += alpha * (ret2 - self.q2[s][a])
+        self.q[s][a] = self.q1[s][a] + self.q2[s][a]
     
     def display(self, display_type):
         pass
