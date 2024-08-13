@@ -337,14 +337,32 @@ class TDAgent(Agent):
             return self.pi[s]
         return np.random.choice(len(self.actions[s]), p=self.b[s])
 
-    def update_b(self, eps, to_update=None):
+    def update_b(self, eps, to_update=None, prev_opt=None):
         if to_update is None:
             to_update = [i for i in range(self.size)]
-        for s in to_update:
-            self.b[s] = [eps / len(self.actions[s]) for _ in self.actions[s]]
-            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+        if prev_opt is not None and isinstance(to_update, int):
+            self.b[to_update][prev_opt] = eps / len(self.actions[to_update])
+            self.b[to_update][self.pi[to_update]] = 1 - eps + eps / len(self.actions[to_update])
+        else:
+            for s in to_update:
+                self.b[s] = [eps / len(self.actions[s]) for _ in self.actions[s]]
+                self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
 
-    def train(self, algo, num_ep, n=1, gamma=1, alpha=0.1, eps=0.1, explore_starts=False, rand_actions=True, batch_size=1, q=None, pi=None, save_params=True, save_time=True):
+    def train(self, 
+        algo, 
+        num_ep, 
+        n=1, 
+        gamma=1, 
+        alpha=0.1, 
+        eps=0.1, 
+        explore_starts=False, 
+        rand_actions=False, 
+        batch_size=1, 
+        q=None, 
+        pi=None, 
+        save_params=True, 
+        save_time=True,
+    ):
         self.init_train(eps, rand_actions, q, pi)
         if save_params:
             self.config_meta({'algo': algo, 'num_ep': num_ep, 'n': n, 'gamma': gamma, 'alpha': alpha, 'eps': eps, 'explore_starts': explore_starts})
@@ -352,7 +370,7 @@ class TDAgent(Agent):
         while ep < num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                if algo in ['sarsa', 'offsarsa', 'expsarsa', 'expoffsarsa']:
+                if algo in ['sarsa', 'offsarsa', 'expsarsa', 'expoffsarsa', 'tree']:
                     self.sarsa_ep(algo, n, gamma, alpha, eps, explore_starts)
                 elif algo == 'qlearn':
                     self.qlearn_ep(gamma, alpha, eps, explore_starts)
@@ -390,17 +408,35 @@ class TDAgent(Agent):
             # update step t-n+1 with return from steps t-n+1:t+1
             prev = t - n + 1
             if prev >= 0:
-                ret = self.get_return(algo, gamma, prev, t, T, cache)
+                ret = 0
+                if algo == 'tree':
+                    ret = self.get_tree_return(algo, gamma, prev, t, T, cache)
+                else:
+                    ret = self.get_sarsa_return(algo, gamma, prev, t, T, cache)
                 rho = self.get_importance_ratio(algo, prev, t, T, cache)
-                prev_s, prev_a = cache[prev % (n + 1)][:2]
                 # update step t-n+1
-                self.q[prev_s][prev_a] += alpha * rho * (ret - self.q[prev_s][prev_a])
+                prev_s, prev_a = cache[prev % (n + 1)][:2]
+                self._single_q_update(prev_s, prev_a, ret, alpha, rho)
+                prev_opt = self.pi[prev_s]
                 self.pi[prev_s] = int(np.argmax(self.q[prev_s]))
-                self.update_b(eps, [prev_s])
+                self.update_b(eps, prev_s, prev_opt)
             s, a = new_s, new_a
             t += 1
     
-    def get_return(self, algo, gamma, prev, t, T, cache):
+    def get_tree_return(self, algo, gamma, prev, t, T, cache):
+        ret = cache[min(t + 1, T) % len(cache)][2]
+        if t + 1 < T:
+            end_s = cache[(t + 1) % len(cache)][0]
+            ret += gamma * self.q[end_s][self.pi[end_s]]
+        for i in range(min(t, T - 1), prev, -1):
+            cur_s, cur_a, reward = cache[i % len(cache)]
+            if cur_a == self.pi[cur_s]:
+                ret = reward + gamma * ret
+            else:
+                ret = reward + gamma * self.q[cur_s][self.pi[cur_s]]
+        return ret
+
+    def get_sarsa_return(self, algo, gamma, prev, t, T, cache):
         ret = 0
         cur_gamma = 1
         # prev+1 to min(t, T)
@@ -419,7 +455,7 @@ class TDAgent(Agent):
         return ret
 
     def get_importance_ratio(self, algo, prev, t, T, cache):
-        if algo == 'sarsa' or algo == 'expsarsa':
+        if algo != 'offsarsa' and algo != 'expoffsarsa':
             return 1
         rho = 1
         # offsarsa: prev+1 to min(t, T-1)
@@ -460,14 +496,14 @@ class TDAgent(Agent):
             s, a = new_s, new_a
         self.update_b(eps, visited)
     
-    def _single_q_update(self, s, a, ret, alpha):
-        self.q[s][a] += alpha * (ret - self.q[s][a])
+    def _single_q_update(self, s, a, ret, alpha, rho=1):
+        self.q[s][a] += alpha * rho * (ret - self.q[s][a])
 
-    def _double_q_update(self, s, a, ret1, ret2, alpha):
+    def _double_q_update(self, s, a, ret1, ret2, alpha, rho=1):
         if random.randint(0, 1) == 0:
-            self.q1[s][a] += alpha * (ret1 - self.q1[s][a])
+            self.q1[s][a] += alpha * rho * (ret1 - self.q1[s][a])
         else:
-            self.q2[s][a] += alpha * (ret2 - self.q2[s][a])
+            self.q2[s][a] += alpha * rho * (ret2 - self.q2[s][a])
         self.q[s][a] = self.q1[s][a] + self.q2[s][a]
     
     def display(self, display_type):
