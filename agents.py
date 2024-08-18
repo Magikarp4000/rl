@@ -317,7 +317,7 @@ class TDAgent(Agent):
         self.pi = []
         self.b = []
 
-    def init_train(self, eps, rand_actions, q, pi):
+    def init_train(self, eps, rand_actions, q=None, pi=None):
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
@@ -382,7 +382,7 @@ class TDAgent(Agent):
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
 
-    def init_ep(self, explore_starts):
+    def init_ep(self, explore_starts=False):
         s = self.state_to_index(random.choice(self.starts))
         if explore_starts:
             s = random.randint(0, self.size - 1)
@@ -511,6 +511,97 @@ class TDAgent(Agent):
 
     @abstractmethod
     def next_state(self):
+        pass
+
+
+class Dyna(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.config(['q', 'pi', 'b'])
+        self.q = []
+        self.pi = []
+        self.model = {}
+        self.b = []
+    
+    def init_train(self, eps, rand_actions, q=None, pi=None):
+        if rand_actions:
+            for s in range(self.size):
+                random.shuffle(self.actions[s])
+            self.config(['actions'])
+        self.q = q if q else [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
+        self.q[self.size][0] = 0
+        self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size + 1)]
+        self.b = [[eps / len(self.actions[s]) for _ in self.actions[s]]
+                  for s in range(self.size + 1)]
+        for s in range(self.size + 1):
+            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+    
+    def get_action(self, s, eps=None):
+        if eps:
+            if random.random() < eps:
+                return random.randint(0, len(self.actions[s]) - 1)
+            return self.pi[s]
+        return np.random.choice(len(self.actions[s]), p=self.b[s])
+
+    def init_ep(self, explore_starts=False):
+        s = self.state_to_index(random.choice(self.starts))
+        if explore_starts:
+            s = random.randint(0, self.size - 1)
+        a = self.get_action(s)
+        return s, a
+
+    def train(self, 
+        algo,
+        num_ep,
+        n=1,
+        gamma=1.0,
+        alpha=0.1,
+        eps=0.1,
+        rand_actions=True,
+        explore_starts=False,
+        batch_size=1,
+        save_params=True,
+        save_time=True,
+    ):
+        self.init_train(eps, rand_actions)
+        if save_params:
+            self.config_meta({'algo': algo, 'num_ep': num_ep, 'n': n, 'gamma': gamma, 'alpha': alpha, 'eps': eps, 'explore_starts': explore_starts})
+        ep = 0
+        while ep < num_ep:
+            start_time = time.time()
+            for _ in range(batch_size):
+                self.qlearn_ep(n, gamma, alpha, eps, explore_starts)
+                ep += 1
+            end_time = time.time()
+            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+        if save_time:
+            self.config_meta({'time': str(datetime.datetime.now())})
+    
+    def qlearn_ep(self, n, gamma, alpha, eps, explore_starts):
+        s, a = self.init_ep(explore_starts)
+        while s < self.size:
+            new_s, reward = self.qlearn_step(gamma, alpha, s, a)
+            new_a = self.get_action(new_s, eps)
+            self.model[(s, a)] = (new_s, reward)
+            self.sim_exp(n, gamma, alpha)
+            s, a = new_s, new_a
+
+    def qlearn_step(self, gamma, alpha, s, a):
+        new_s, reward = self.next_state(s, a)
+        self.q[s][a] += alpha * (reward + gamma * max(self.q[new_s]) - self.q[s][a])
+        self.pi[s] = int(np.argmax(self.q[s]))
+        return new_s, reward
+    
+    def sim_exp(self, n, gamma, alpha):
+        if self.model:
+            for _ in range(n):
+                s, a = random.choice(list(self.model.keys()))
+                new_s, reward = self.model[(s, a)]
+                self.q[s][a] += alpha * (reward + gamma * max(self.q[new_s]) - self.q[s][a])
+                self.pi[s] = int(np.argmax(self.q[s]))
+    
+    @abstractmethod
+    def next_state(self, s, a):
         pass
 
 
