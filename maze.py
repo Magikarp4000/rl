@@ -53,6 +53,6 @@ class Maze(Dyna):
 cells, starts, finish = racetrack_utils.get_track()
 pro = Maze(cells, starts, finish)
 pro.load('maze/v0.2-alpha', load_actions=True)
-# pro.train('qlearn', 100000, 10, batch_size=1000)
+pro.train('q+', 10000, n=10, kappa=0.1, batch_size=1000)
 # pro.save('maze/v0.2-alpha')
 pro.test(10000)
