@@ -522,8 +522,8 @@ class Dyna(Agent):
         self.pi = []
         self.model = {}
         self.b = []
-        self.last_visit = []
         self.algo = None
+        self.num_ep = None
         self.gamma = None
         self.alpha = None
         self.eps = None
@@ -531,11 +531,11 @@ class Dyna(Agent):
         self.n = None
         self.explore_starts = False
     
-    def init_train(self, num_ep, rand_actions, save_params, q=None, pi=None):
+    def init_train(self, rand_actions, save_params, q=None, pi=None):
         if save_params:
             self.config_meta({
                 'algo': self.algo, 
-                'num_ep': num_ep, 
+                'num_ep': self.num_ep, 
                 'n': self.n, 
                 'gamma': self.gamma, 
                 'alpha': self.alpha, 
@@ -543,8 +543,6 @@ class Dyna(Agent):
                 'kappa': self.kappa, 
                 'explore_starts': self.explore_starts
             })
-        if self.algo == 'q+':
-            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
@@ -572,6 +570,8 @@ class Dyna(Agent):
         if self.explore_starts:
             s = random.randint(0, self.size - 1)
         a = self.get_action(s)
+        if self.algo == 'q+':
+            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         return s, a
 
     def train(self, 
@@ -582,8 +582,8 @@ class Dyna(Agent):
         alpha=0.1,
         eps=0.1,
         kappa=1.0,
-        rand_actions=True,
         explore_starts=False,
+        rand_actions=True,
         batch_size=1,
         q=None,
         pi=None,
@@ -591,13 +591,14 @@ class Dyna(Agent):
         save_time=True,
     ):
         self.algo = algo
+        self.num_ep = num_ep
         self.gamma = gamma
         self.alpha = alpha
         self.eps = eps
         self.kappa = kappa
         self.n = n
         self.explore_starts = explore_starts
-        self.init_train(num_ep, rand_actions, save_params, q, pi)
+        self.init_train(rand_actions, save_params, q, pi)
         ep = 0
         while ep < num_ep:
             start_time = time.time()
@@ -613,32 +614,31 @@ class Dyna(Agent):
         s, a = self.init_ep()
         t = 0
         while s < self.size:
-            new_s, reward = self.qlearn_step(s, a, t)
-            new_a = self.get_action(new_s)
+            new_s, new_a, reward = self.qlearn_step(s, a, t)
             self.model[(s, a)] = (new_s, reward)
-            self.sim_exp(t)
-            if self.algo == 'q+':
-                self.last_visit[s][a] = t
+            self.sim_exp()
             s, a = new_s, new_a
             t += 1
 
     def qlearn_step(self, s, a, t):
         new_s, reward = self.next_state(s, a)
-        self._single_q_update(s, a, new_s, reward, t)
+        new_a = self.get_action(s, a)
+        if self.algo == 'q+':
+            reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
+            self.last_visit[s][a] = t
+        self._single_q_update(s, a, new_s, reward)
         self.pi[s] = int(np.argmax(self.q[s]))
-        return new_s, reward
+        return new_s, new_a, reward
     
-    def sim_exp(self, t):
+    def sim_exp(self):
         if self.model:
             for _ in range(self.n):
                 s, a = random.choice(list(self.model.keys()))
                 new_s, reward = self.model[(s, a)]
-                self._single_q_update(s, a, new_s, reward, t)
+                self._single_q_update(s, a, new_s, reward)
                 self.pi[s] = int(np.argmax(self.q[s]))
     
-    def _single_q_update(self, s, a, new_s, reward, t):
-        if self.algo == 'q+':
-            reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
+    def _single_q_update(self, s, a, new_s, reward):
         self.q[s][a] += self.alpha * (reward + self.gamma * max(self.q[new_s]) - self.q[s][a])
 
 
