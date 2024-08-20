@@ -530,6 +530,7 @@ class Dyna(Agent):
         self.kappa = None
         self.n = None
         self.explore_starts = False
+        self.last_visit = []
     
     def init_train(self, rand_actions, save_params, q=None, pi=None):
         if save_params:
@@ -543,6 +544,8 @@ class Dyna(Agent):
                 'kappa': self.kappa, 
                 'explore_starts': self.explore_starts
             })
+        if self.algo == 'q+':
+            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
@@ -570,8 +573,6 @@ class Dyna(Agent):
         if self.explore_starts:
             s = random.randint(0, self.size - 1)
         a = self.get_action(s)
-        if self.algo == 'q+':
-            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         return s, a
 
     def train(self, 
@@ -581,7 +582,7 @@ class Dyna(Agent):
         gamma=1.0,
         alpha=0.1,
         eps=0.1,
-        kappa=1.0,
+        kappa=0.05,
         explore_starts=False,
         rand_actions=True,
         batch_size=1,
@@ -600,31 +601,33 @@ class Dyna(Agent):
         self.explore_starts = explore_starts
         self.init_train(rand_actions, save_params, q, pi)
         ep = 0
+        t = 0
         while ep < num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                self.qlearn_ep()
+                t = self.qlearn_ep(t)
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
     
-    def qlearn_ep(self):
+    def qlearn_ep(self, t):
         s, a = self.init_ep()
-        t = 0
         while s < self.size:
             new_s, new_a, reward = self.qlearn_step(s, a, t)
             self.model[(s, a)] = (new_s, reward)
             self.sim_exp()
             s, a = new_s, new_a
             t += 1
+        return t
 
     def qlearn_step(self, s, a, t):
         new_s, reward = self.next_state(s, a)
-        new_a = self.get_action(s, a)
+        new_a = self.get_action(new_s)
         if self.algo == 'q+':
             reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
+            # print(s, self.actions[s][a], t-self.last_visit[s][a])
             self.last_visit[s][a] = t
         self._single_q_update(s, a, new_s, reward)
         self.pi[s] = int(np.argmax(self.q[s]))
