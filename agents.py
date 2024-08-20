@@ -522,84 +522,126 @@ class Dyna(Agent):
         self.pi = []
         self.model = {}
         self.b = []
+        self.last_visit = []
+        self.algo = None
+        self.gamma = None
+        self.alpha = None
+        self.eps = None
+        self.kappa = None
+        self.n = None
+        self.explore_starts = False
     
-    def init_train(self, eps, rand_actions, q=None, pi=None):
+    def init_train(self, num_ep, rand_actions, save_params, q=None, pi=None):
+        if save_params:
+            self.config_meta({
+                'algo': self.algo, 
+                'num_ep': num_ep, 
+                'n': self.n, 
+                'gamma': self.gamma, 
+                'alpha': self.alpha, 
+                'eps': self.eps, 
+                'kappa': self.kappa, 
+                'explore_starts': self.explore_starts
+            })
+        if self.algo == 'q+':
+            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
             self.config(['actions'])
-        self.q = q if q else [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
+        self.q = q if q is not None else [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         self.q[self.size][0] = 0
-        self.pi = pi if pi else [int(np.argmax(self.q[s])) for s in range(self.size + 1)]
-        self.b = [[eps / len(self.actions[s]) for _ in self.actions[s]]
+        self.pi = pi if pi is not None else [int(np.argmax(self.q[s])) for s in range(self.size + 1)]
+        self.b = [[self.eps / len(self.actions[s]) for _ in self.actions[s]]
                   for s in range(self.size + 1)]
         for s in range(self.size + 1):
-            self.b[s][self.pi[s]] = 1 - eps + eps / len(self.actions[s])
+            self.b[s][self.pi[s]] = 1 - self.eps + self.eps / len(self.actions[s])
     
     def get_action(self, s, eps=None):
+        if eps is None:
+            if self.eps is not None:
+                eps = self.eps
         if eps:
             if random.random() < eps:
                 return random.randint(0, len(self.actions[s]) - 1)
             return self.pi[s]
         return np.random.choice(len(self.actions[s]), p=self.b[s])
 
-    def init_ep(self, explore_starts=False):
+    def init_ep(self):
         s = self.state_to_index(random.choice(self.starts))
-        if explore_starts:
+        if self.explore_starts:
             s = random.randint(0, self.size - 1)
         a = self.get_action(s)
         return s, a
 
     def train(self, 
-        algo,
+        algo, 
         num_ep,
         n=1,
         gamma=1.0,
         alpha=0.1,
         eps=0.1,
+        kappa=1.0,
         rand_actions=True,
         explore_starts=False,
         batch_size=1,
+        q=None,
+        pi=None,
         save_params=True,
         save_time=True,
     ):
-        self.init_train(eps, rand_actions)
-        if save_params:
-            self.config_meta({'algo': algo, 'num_ep': num_ep, 'n': n, 'gamma': gamma, 'alpha': alpha, 'eps': eps, 'explore_starts': explore_starts})
+        self.algo = algo
+        self.gamma = gamma
+        self.alpha = alpha
+        self.eps = eps
+        self.kappa = kappa
+        self.n = n
+        self.explore_starts = explore_starts
+        self.init_train(num_ep, rand_actions, save_params, q, pi)
         ep = 0
         while ep < num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                self.qlearn_ep(n, gamma, alpha, eps, explore_starts)
+                self.qlearn_ep()
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
     
-    def qlearn_ep(self, n, gamma, alpha, eps, explore_starts):
-        s, a = self.init_ep(explore_starts)
+    def qlearn_ep(self):
+        s, a = self.init_ep()
+        t = 0
         while s < self.size:
-            new_s, reward = self.qlearn_step(gamma, alpha, s, a)
-            new_a = self.get_action(new_s, eps)
+            new_s, reward = self.qlearn_step(s, a, t)
+            new_a = self.get_action(new_s)
             self.model[(s, a)] = (new_s, reward)
-            self.sim_exp(n, gamma, alpha)
+            self.sim_exp(t)
+            if self.algo == 'q+':
+                self.last_visit[s][a] = t
             s, a = new_s, new_a
+            t += 1
 
-    def qlearn_step(self, gamma, alpha, s, a):
+    def qlearn_step(self, s, a, t):
         new_s, reward = self.next_state(s, a)
-        self.q[s][a] += alpha * (reward + gamma * max(self.q[new_s]) - self.q[s][a])
+        self._single_q_update(s, a, new_s, reward, t)
         self.pi[s] = int(np.argmax(self.q[s]))
         return new_s, reward
     
-    def sim_exp(self, n, gamma, alpha):
+    def sim_exp(self, t):
         if self.model:
-            for _ in range(n):
+            for _ in range(self.n):
                 s, a = random.choice(list(self.model.keys()))
                 new_s, reward = self.model[(s, a)]
-                self.q[s][a] += alpha * (reward + gamma * max(self.q[new_s]) - self.q[s][a])
+                self._single_q_update(s, a, new_s, reward, t)
                 self.pi[s] = int(np.argmax(self.q[s]))
     
+    def _single_q_update(self, s, a, new_s, reward, t):
+        if self.algo == 'q+':
+            reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
+        self.q[s][a] += self.alpha * (reward + self.gamma * max(self.q[new_s]) - self.q[s][a])
+
+
     @abstractmethod
     def next_state(self, s, a):
         pass
