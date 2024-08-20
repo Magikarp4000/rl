@@ -544,8 +544,6 @@ class Dyna(Agent):
                 'kappa': self.kappa, 
                 'explore_starts': self.explore_starts
             })
-        if self.algo == 'q+':
-            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
@@ -573,6 +571,8 @@ class Dyna(Agent):
         if self.explore_starts:
             s = random.randint(0, self.size - 1)
         a = self.get_action(s)
+        if self.algo == 'q+':
+            self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         return s, a
 
     def train(self, 
@@ -601,18 +601,18 @@ class Dyna(Agent):
         self.explore_starts = explore_starts
         self.init_train(rand_actions, save_params, q, pi)
         ep = 0
-        t = 0
         while ep < num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                t = self.qlearn_ep(t)
+                self.qlearn_ep()
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
     
-    def qlearn_ep(self, t):
+    def qlearn_ep(self):
+        t = 0
         s, a = self.init_ep()
         while s < self.size:
             new_s, new_a, reward = self.qlearn_step(s, a, t)
@@ -620,7 +620,6 @@ class Dyna(Agent):
             self.sim_exp()
             s, a = new_s, new_a
             t += 1
-        return t
 
     def qlearn_step(self, s, a, t):
         new_s, reward = self.next_state(s, a)
