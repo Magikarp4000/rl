@@ -531,6 +531,8 @@ class Dyna(Agent):
         self.last_visit = []
 
         # Prioritised sweeping
+        self.reverse_model = {}
+        self.priors = {}
         self.pq = []
         heapq.heapify(self.pq)
 
@@ -597,7 +599,7 @@ class Dyna(Agent):
         alpha=0.1,
         eps=0.1,
         kappa=0.05,
-        theta=0.01,
+        theta=0.05,
         explore_starts=False,
         rand_actions=True,
         batch_size=1,
@@ -635,7 +637,7 @@ class Dyna(Agent):
         s, a = self.init_ep()
         while s < self.size:
             new_s, new_a, reward = self.qlearn_step(s, a, t)
-            self.model[(s, a)] = (new_s, reward)
+            self.update_model(s, a, new_s, reward)
             self.sim_exp()
             s, a = new_s, new_a
             t += 1
@@ -643,28 +645,55 @@ class Dyna(Agent):
     def qlearn_step(self, s, a, t):
         new_s, reward = self.next_state(s, a)
         new_a = self.get_action(new_s)
-        if self.algo == 'q+':
+        if self.algo == 'q+' or self.algo == 'prioq+':
             reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
             self.last_visit[s][a] = t
         prior = self._single_q_update(s, a, new_s, reward)
         if self.algo == 'prioq' or self.algo == 'prioq+':
-            if prior >= self.theta:
-                heapq.heappush((-prior, s, a))
+            self._prior_update(prior, s, a)
         self.pi[s] = int(np.argmax(self.q[s]))
         return new_s, new_a, reward
+
+    def update_model(self, s, a, new_s, reward):
+        if self.algo == 'priorq' or self.algo == 'priorq+':
+            if (s, a) in self.model:
+                old_s = self.model[(s, a)]
+                self.reverse_model[old_s].remove((s, a))
+            if new_s not in self.reverse_model:
+                self.reverse_model[new_s] = [(s, a)]
+            else:
+                self.reverse_model[new_s].append((s, a)) 
+        self.model[(s, a)] = (new_s, reward)
     
     def sim_exp(self):
-        samp = random.sample(list(self.model.keys()), min(self.n, len(self.model)))
-        for s, a in samp:
-            new_s, reward = self.model[(s, a)]
-            self._single_q_update(s, a, new_s, reward)
-            self.pi[s] = int(np.argmax(self.q[s]))
+        if self.algo == 'prioq' or self.algo == 'prioq+':
+            for _ in range(self.n):
+                if not self.pq:
+                    break
+                _, s, a = heapq.heappop(self.pq)
+                new_s, reward = self.model[(s, a)]
+                self._single_q_update(s, a, new_s, reward)
+                self.pi[s] = int(np.argmax(self.q[s]))
+                for prev_s, prev_a in self.reverse_model[s]:
+                    _, prev_reward = self.next_state(prev_s, prev_a)
+                    prior = prev_reward + self.gamma * max(self.q[s]) - self.q[prev_s][prev_a]
+                    self._prior_update(prior, prev_s, prev_a)
+        else:
+            samp = random.sample(list(self.model.keys()), min(self.n, len(self.model)))
+            for s, a in samp:
+                new_s, reward = self.model[(s, a)]
+                self._single_q_update(s, a, new_s, reward)
+                self.pi[s] = int(np.argmax(self.q[s]))
     
     def _single_q_update(self, s, a, new_s, reward):
         _update = reward + self.gamma * max(self.q[new_s]) - self.q[s][a]
         self.q[s][a] += self.alpha * _update
         return _update
 
+    def _prior_update(self, prior, s, a):
+        threshold = self.theta if (s, a) not in self.priors else max(self.theta, self.priors[(s, a)])
+        if prior >= threshold:
+            heapq.heappush(self.pq, (-prior, s, a))
 
     @abstractmethod
     def next_state(self, s, a):
