@@ -1,4 +1,4 @@
-import random, time, datetime
+import random, time, datetime, heapq
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -517,20 +517,33 @@ class TDAgent(Agent):
 class Dyna(Agent):
     def __init__(self, *args, **kwargs):
         super().__init__()
-        self.config(['q', 'pi', 'b'])
+        # Base variables
+        self.algos = ['q', 'q+', 'prioq', 'prioq+']
+
+        # Agent data
+        self.config(['q', 'pi'])
         self.q = []
         self.pi = []
         self.model = {}
         self.b = []
+
+        # Q+
+        self.last_visit = []
+
+        # Prioritised sweeping
+        self.pq = []
+        heapq.heapify(self.pq)
+
+        # Training parameters
         self.algo = None
         self.num_ep = None
         self.gamma = None
         self.alpha = None
         self.eps = None
         self.kappa = None
+        self.theta = None
         self.n = None
         self.explore_starts = False
-        self.last_visit = []
     
     def init_train(self, rand_actions, save_params, q=None, pi=None):
         if save_params:
@@ -542,6 +555,7 @@ class Dyna(Agent):
                 'alpha': self.alpha, 
                 'eps': self.eps, 
                 'kappa': self.kappa, 
+                'theta': self.theta,
                 'explore_starts': self.explore_starts
             })
         if rand_actions:
@@ -583,6 +597,7 @@ class Dyna(Agent):
         alpha=0.1,
         eps=0.1,
         kappa=0.05,
+        theta=0.01,
         explore_starts=False,
         rand_actions=True,
         batch_size=1,
@@ -591,25 +606,29 @@ class Dyna(Agent):
         save_params=True,
         save_time=True,
     ):
-        self.algo = algo
-        self.num_ep = num_ep
-        self.gamma = gamma
-        self.alpha = alpha
-        self.eps = eps
-        self.kappa = kappa
-        self.n = n
-        self.explore_starts = explore_starts
-        self.init_train(rand_actions, save_params, q, pi)
-        ep = 0
-        while ep < num_ep:
-            start_time = time.time()
-            for _ in range(batch_size):
-                self.qlearn_ep()
-                ep += 1
-            end_time = time.time()
-            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
-        if save_time:
-            self.config_meta({'time': str(datetime.datetime.now())})
+        if algo not in self.algos:
+            print("Invalid algorithm mate")
+        else:
+            self.algo = algo
+            self.num_ep = num_ep
+            self.gamma = gamma
+            self.alpha = alpha
+            self.eps = eps
+            self.kappa = kappa
+            self.theta = theta
+            self.n = n
+            self.explore_starts = explore_starts
+            self.init_train(rand_actions, save_params, q, pi)
+            ep = 0
+            while ep < num_ep:
+                start_time = time.time()
+                for _ in range(batch_size):
+                    self.qlearn_ep()
+                    ep += 1
+                end_time = time.time()
+                print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+            if save_time:
+                self.config_meta({'time': str(datetime.datetime.now())})
     
     def qlearn_ep(self):
         t = 0
@@ -626,22 +645,25 @@ class Dyna(Agent):
         new_a = self.get_action(new_s)
         if self.algo == 'q+':
             reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
-            # print(s, self.actions[s][a], t-self.last_visit[s][a])
             self.last_visit[s][a] = t
-        self._single_q_update(s, a, new_s, reward)
+        prior = self._single_q_update(s, a, new_s, reward)
+        if self.algo == 'prioq' or self.algo == 'prioq+':
+            if prior >= self.theta:
+                heapq.heappush((-prior, s, a))
         self.pi[s] = int(np.argmax(self.q[s]))
         return new_s, new_a, reward
     
     def sim_exp(self):
-        if self.model:
-            for _ in range(self.n):
-                s, a = random.choice(list(self.model.keys()))
-                new_s, reward = self.model[(s, a)]
-                self._single_q_update(s, a, new_s, reward)
-                self.pi[s] = int(np.argmax(self.q[s]))
+        samp = random.sample(list(self.model.keys()), min(self.n, len(self.model)))
+        for s, a in samp:
+            new_s, reward = self.model[(s, a)]
+            self._single_q_update(s, a, new_s, reward)
+            self.pi[s] = int(np.argmax(self.q[s]))
     
     def _single_q_update(self, s, a, new_s, reward):
-        self.q[s][a] += self.alpha * (reward + self.gamma * max(self.q[new_s]) - self.q[s][a])
+        _update = reward + self.gamma * max(self.q[new_s]) - self.q[s][a]
+        self.q[s][a] += self.alpha * _update
+        return _update
 
 
     @abstractmethod
