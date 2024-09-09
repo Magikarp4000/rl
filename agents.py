@@ -712,3 +712,7 @@ class Dyna(Agent):
     @abstractmethod
     def next_state(self, s, a):
         pass
+
+
+def random_argmax(arr):
+    return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
