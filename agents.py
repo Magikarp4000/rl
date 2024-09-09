@@ -7,12 +7,16 @@ import data_transfer
 
 class Agent(ABC):
     def __init__(self, *args, **kwargs):
+        # Model data
         self._data = []
         self._metadata = {}
+
+        # Environment & agent
         self.states = []
         self.actions = [[]]
         self.size = 0
         self.state_map = {}
+        self.starts = []
     
     def core_init(self, *args, **kwargs):
         self.set_state_actions(*args, **kwargs)
@@ -520,7 +524,7 @@ class Dyna(Agent):
         # Base variables
         self.algos = ['q', 'q+', 'prioq', 'prioq+']
 
-        # Agent data
+        # Model data
         self.config(['q', 'pi'])
         self.q = []
         self.pi = []
@@ -548,6 +552,7 @@ class Dyna(Agent):
         self.explore_starts = False
     
     def init_train(self, rand_actions, save_params, q=None, pi=None):
+        # Save parameters
         if save_params:
             self.config_meta({
                 'algo': self.algo, 
@@ -560,10 +565,14 @@ class Dyna(Agent):
                 'theta': self.theta,
                 'explore_starts': self.explore_starts
             })
+        
+        # Randomise actions
         if rand_actions:
             for s in range(self.size):
                 random.shuffle(self.actions[s])
             self.config(['actions'])
+        
+        # Initialise model data
         self.q = q if q is not None else [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         self.q[self.size][0] = 0
         self.pi = pi if pi is not None else [int(np.argmax(self.q[s])) for s in range(self.size + 1)]
@@ -645,20 +654,25 @@ class Dyna(Agent):
     def qlearn_step(self, s, a, t):
         new_s, reward = self.next_state(s, a)
         new_a = self.get_action(new_s)
+
         if self.algo == 'q+' or self.algo == 'prioq+':
             reward += self.kappa * np.sqrt(t - self.last_visit[s][a])
             self.last_visit[s][a] = t
+        
         prior = self._single_q_update(s, a, new_s, reward)
+
         if self.algo == 'prioq' or self.algo == 'prioq+':
-            self._prior_update(prior, s, a)
+            self._prio_update(prior, s, a)
+        
         self.pi[s] = int(np.argmax(self.q[s]))
+
         return new_s, new_a, reward
 
     def update_model(self, s, a, new_s, reward):
-        if self.algo == 'priorq' or self.algo == 'priorq+':
+        if self.algo == 'prioq' or self.algo == 'prioq+':
             if (s, a) in self.model:
-                old_s = self.model[(s, a)]
-                self.reverse_model[old_s].remove((s, a))
+                old_new_s = self.model[(s, a)][0]
+                self.reverse_model[old_new_s].remove((s, a))
             if new_s not in self.reverse_model:
                 self.reverse_model[new_s] = [(s, a)]
             else:
@@ -677,7 +691,7 @@ class Dyna(Agent):
                 for prev_s, prev_a in self.reverse_model[s]:
                     _, prev_reward = self.next_state(prev_s, prev_a)
                     prior = prev_reward + self.gamma * max(self.q[s]) - self.q[prev_s][prev_a]
-                    self._prior_update(prior, prev_s, prev_a)
+                    self._prio_update(prior, prev_s, prev_a)
         else:
             samp = random.sample(list(self.model.keys()), min(self.n, len(self.model)))
             for s, a in samp:
@@ -690,7 +704,7 @@ class Dyna(Agent):
         self.q[s][a] += self.alpha * _update
         return _update
 
-    def _prior_update(self, prior, s, a):
+    def _prio_update(self, prior, s, a):
         threshold = self.theta if (s, a) not in self.priors else max(self.theta, self.priors[(s, a)])
         if prior >= threshold:
             heapq.heappush(self.pq, (-prior, s, a))
@@ -698,7 +712,3 @@ class Dyna(Agent):
     @abstractmethod
     def next_state(self, s, a):
         pass
-
-
-def random_argmax(arr):
-    return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
