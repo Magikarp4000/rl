@@ -1,5 +1,5 @@
 import agents
-import random
+import random, os
 from collections import deque
 import numpy as np
 import pygame
@@ -8,7 +8,7 @@ from pygame.locals import *
 
 WIDTH = 900
 HEIGHT = 550
-SIZE = 5
+SIZE = 15
 X = WIDTH // SIZE
 Y = HEIGHT // SIZE
 FPS = 60
@@ -17,7 +17,7 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
-STATE_COLOURS = {
+SQUARE_COLOURS = {
     'empty': BLACK,
     'track': WHITE,
     'start': BLUE,
@@ -28,6 +28,7 @@ MOUSE_COLOURS = {
     'start': BLUE,
     'finish': GREEN
 }
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class _GUISquare:
     def __init__(self, x, y):
@@ -44,7 +45,7 @@ class _GUISquare:
             self.state = 'empty'
     
     def update(self, *args, **kwargs):
-        self.image.fill(STATE_COLOURS[self.state])
+        self.image.fill(SQUARE_COLOURS[self.state])
     
     def reset(self):
         self.state = 'empty'
@@ -64,23 +65,19 @@ class _CursorSquare():
 class Car:
     def __init__(self, x, y):
         self.image = pygame.Surface((SIZE, SIZE))
-        self.rect = self.image.get_rect(center=(x * SIZE + SIZE / 2, y * SIZE + SIZE / 2))
-        self.image.fill((255, 0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.center = (x * SIZE + SIZE / 2, y * SIZE + SIZE / 2)
+        self.image.fill(RED)
     
     def update(self, x, y):
-        self.rect = self.image.get_rect(center=(x * SIZE + SIZE / 2, y * SIZE + SIZE / 2))
+        self.rect.center = (x * SIZE + SIZE / 2, y * SIZE + SIZE / 2)
 
 
 class Square:
     def __init__(self, x, y, _type):
         self.image = pygame.Surface((SIZE, SIZE))
         self.rect = self.image.get_rect(center=(x * SIZE + SIZE / 2, y * SIZE + SIZE / 2))
-        if _type == 'track':
-            self.image.fill((255, 255, 255))
-        elif _type == 'start':
-            self.image.fill((0, 0, 255))
-        elif _type == 'finish':
-            self.image.fill((0, 255, 0))
+        self.image.fill(SQUARE_COLOURS[_type])
 
 
 class Racetrack(agents.Agent):
@@ -128,6 +125,21 @@ class Racetrack(agents.Agent):
     
     def add_terminal_state(self):
         self.actions.append([(0, 0)])
+    
+    def next_state(self, s, a):
+        x, y, xspe, yspe = self.states[s]
+        dx, dy = self.actions[s][a]
+        nxspe = max(-self.max_spe, min(self.max_spe, xspe + dx))
+        nyspe = max(-self.max_spe, min(self.max_spe, yspe + dy))
+        nx = x + nxspe
+        ny = y + nyspe
+        reward = -1
+        if (nx, ny) in self.finish_set:
+            return self.size, reward
+        if (nx, ny) not in self.track_set:
+            nx, ny, nxspe, nyspe = self.reset()
+        new_s = self.state_to_index((nx, ny, nxspe, nyspe))
+        return new_s, reward
 
     def calc_rewards(self):
         delta_x = [0, 0, 1, -1]
@@ -148,6 +160,7 @@ class Racetrack(agents.Agent):
         return {pos: -d[pos] for pos in d}
 
     def load_convert(self):
+        super().load_convert()
         self.track = [tuple(x) for x in self.track]
         self.start = [tuple(x) for x in self.start]
         self.finish = [tuple(x) for x in self.finish]
@@ -156,7 +169,7 @@ class Racetrack(agents.Agent):
         x, y = random.choice(self.start)
         return x, y, 0, 0
 
-    def animate(self, fps=None, no_reset=False, policy='opt'):
+    def animate(self, fps=None, no_reset=False, policy='opt', eps=0.1):
         pygame.init()
         W, H = np.array(self.track).max(axis=0) + 1
         clock = pygame.time.Clock()
@@ -166,7 +179,7 @@ class Racetrack(agents.Agent):
         squares = []
         for x in range(W):
             for y in range(H):
-                _type = ''
+                _type = 'empty'
                 if (x, y) in self.finish_set:
                     _type = 'finish'
                 elif (x, y) in self.start_set:
@@ -199,7 +212,7 @@ class Racetrack(agents.Agent):
                 s = self.state_to_index(state)
                 dx, dy = self.actions[s][self.pi[s]]
                 if policy == 'sub':
-                    dx, dy = self.actions[s][self.get_action(s)]
+                    dx, dy = self.actions[s][self.get_action(s, eps)]
                 elif policy =='rand':
                     dx, dy = random.choice(self.actions[s])
                 xspe = max(-self.max_spe, min(self.max_spe, xspe + dx))
