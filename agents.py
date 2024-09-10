@@ -714,5 +714,123 @@ class Dyna(Agent):
         pass
 
 
+class Approximator(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        # Base variables
+        self.algos = ['td', 'qlearn']
+        
+        # Model data
+        self.config(['d', 'w', 'x'])
+        self.d = None
+        self.w = []
+        self.x = []
+
+        # Training parameters
+        self.algo = None
+        self.num_ep = None
+        self.gamma = None
+        self.alpha = None
+        self.eps = None
+        self.explore_starts = False
+
+    def init_train(self, save_params):
+        # Save parameters
+        if save_params:
+            self.config_meta({
+                'algo': self.algo,
+                'num_ep': self.num_ep,
+                'gamma': self.gamma,
+                'alpha': self.alpha
+            })
+        
+        # Initialise model data
+        self.w = np.zeros(self.d)
+
+    def init_ep(self):
+        s = self.state_to_index(random.choice(self.starts))
+        if self.explore_starts:
+            s = random.randint(0, self.size - 1)
+        a = self.get_action(s)
+        return s, a
+
+    def train(self,
+        algo,
+        num_ep,
+        dim=1,
+        gamma=1.0,
+        alpha=0.1,
+        eps=0.1,
+        explore_starts=False,
+        save_params=True,
+        save_time=True,
+    ):
+        if algo not in self.algos:
+            print("Invalid algorithm mate!\nList of valid algorithms:")
+            for x in self.algos:
+                print(f'- {x}')
+            return
+        self.d = dim
+        self.algo = algo
+        self.num_ep = num_ep
+        self.gamma = gamma
+        self.alpha = alpha
+        self.eps = eps
+        self.explore_starts = explore_starts
+        self.init_train(save_params)
+        if algo == 'td':
+            self.td()
+        elif algo == 'lstd':
+            self.lstd()
+        if save_time:
+            self.config_meta({'time': str(datetime.datetime.now())})
+    
+    def td(self):
+        ep = 0
+        while ep < self.num_ep:
+            self.td_ep()
+            ep += 1
+
+    def td_ep(self):
+        s = self.init_ep()
+        while s < self.size:
+            a = self.pi[s]
+            new_s, reward = self.next_state(s, a)
+            w += self.alpha * (reward + self.gamma * self.v(new_s) - self.v(s)) * self.v_prime(s)
+    
+    def lstd(self):
+        a_inv = (1 / self.eps) * np.identity(self.d)
+        b = np.zeros(self.d).transpose()
+        ep = 0
+        while ep < self.num_ep:
+            a_inv, b = self.lstd_ep(a_inv, b)
+            ep += 1
+
+    def lstd_ep(self, a_inv, b):
+        s, a = self.init_ep()
+        x = self.x[s]
+        while s < self.size:
+            a = self.pi[s]
+            new_s, reward = self.next_state(s, a)
+            new_x = self.x[new_s]
+            v = (a_inv.transpose() * (x - self.gamma * new_x)).transpose()
+            a_inv -= (a_inv * x * v) / (1 + v * x) # sherman-morrison
+            b += reward * x
+            w = a_inv * b
+            s, x = new_s, new_x
+        return a_inv, b
+
+    def v(self, s):
+        return np.dot(self.w, self.x[s])
+
+    def v_prime(self, s):
+        return self.x[s]
+
+    @abstractmethod
+    def next_state(self, s, a):
+        pass
+
+
+
 def random_argmax(arr):
     return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
