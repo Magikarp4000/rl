@@ -2,6 +2,8 @@ import random, time, datetime, heapq
 from abc import ABC, abstractmethod
 
 import numpy as np
+from matplotlib import pyplot as pl
+
 import data_transfer
 
 
@@ -806,22 +808,27 @@ class Approximator(Agent):
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
     
-    def get_action(self, s):
-        if np.random.random() < self.eps:
+    def get_action(self, s, eps=None):
+        if eps is None:
+            eps = self.eps
+        if np.random.random() < eps:
             return np.random.randint(len(self.base_actions))
         else:
-            temp = [self.q(s, a) for a in range(len(self.base_actions))]
-            return random_argmax(temp)
+            tmp = [self.q(s, a) for a in range(len(self.base_actions))]
+            return random_argmax(tmp)
 
     def sarsa(self, batch_size):
         ep = 0
+        steps_list = []
         while ep < self.num_ep:
             start_time = time.time()
             for _ in range(batch_size):
-                self.sarsa_ep()
+                steps = self.sarsa_ep()
+                steps_list.append(steps)
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+        graph(steps_list, 'Num steps', 'Episode')
 
     def sarsa_ep(self):
         s, a = self.init_ep()
@@ -874,7 +881,7 @@ class Approximator(Agent):
             s, x = new_s, new_x
         return a_inv, b
 
-    def v(self, s):
+    def v(self, s: list):
         if s == -1:
             return 0
         res = 0
@@ -883,7 +890,7 @@ class Approximator(Agent):
             res += self.w[tile]
         return res
 
-    def v_prime(self, s):
+    def v_prime(self, s: list):
         x = np.zeros(self.d)
         if s == -1:
             return x
@@ -892,27 +899,42 @@ class Approximator(Agent):
             x[tile] = 1
         return x
     
-    def q(self, s, a):
+    def q(self, s: list, a: int):
         new_s, reward = self.next_state(s, a)
         return reward + self.gamma * self.v(new_s)
 
-    def q_prime(self, s, a):
+    def q_prime(self, s: list, a: int):
         new_s, _ = self.next_state(s, a)
         return self.gamma * self.v_prime(new_s)
 
-    def get_tile_coding(self, s):
+    def get_tile_coding(self, s: list):
+        prec = 2
         res = []
         for i in range(self.num_tiles):
             idx = i * (self.tile_frac + 1) ** 2
             mult = 1
-            for s_i, bound in zip(s, self.bounds):
+            for s_j, bound in zip(s, self.bounds):
                 l = bound[1] - bound[0]
                 tile_size = l / self.tile_frac
-                cur = int(np.floor((s_i + i * tile_size / self.num_tiles - bound[0]) / tile_size))
+                cur_raw = (s_j + i * tile_size / self.num_tiles - bound[0]) / tile_size
+                cur = int(np.floor(cur_raw))
+                # print(cur_raw, cur)
                 idx += cur * mult
                 mult *= self.tile_frac + 1
             res.append(idx)
         return res
+
+    def test(self, num=1):
+        tmp = []
+        for _ in range(num):
+            steps = 0
+            s, a = self.init_ep()
+            while s != -1:
+                a = self.get_action(s, eps=0)
+                s, _ = self.next_state(s, a)
+                steps += 1
+            tmp.append(steps)
+        return np.average(tmp)
 
     @abstractmethod
     def next_state(self, s, a):
@@ -921,3 +943,9 @@ class Approximator(Agent):
 
 def random_argmax(arr):
     return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
+
+def graph(y, xlabel=None, ylabel=None):
+    pl.xlabel(xlabel)
+    pl.ylabel(ylabel)
+    pl.plot(np.arange(len(y)), y)
+    pl.show()
