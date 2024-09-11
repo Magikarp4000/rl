@@ -11,7 +11,7 @@ class Agent(ABC):
         self._data = []
         self._metadata = {}
 
-        # Environment & agent
+        # Environment & agent data
         self.states = []
         self.actions = [[]]
         self.size = 0
@@ -715,11 +715,17 @@ class Dyna(Agent):
 
 
 class Approximator(Agent):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, base_actions=[], bounds=[], start_bounds=[], *args, **kwargs):
         super().__init__()
         # Base variables
-        self.algos = ['td', 'qlearn']
-        
+        self.algos = ['td', 'qlearn', 'sarsa']
+
+        # Environment & agent data
+        self.config(['base_actions', 'bounds', 'start_bounds'])
+        self.base_actions = base_actions
+        self.bounds = bounds
+        self.start_bounds = start_bounds
+
         # Model data
         self.config(['d', 'w', 'x'])
         self.d = None
@@ -732,7 +738,12 @@ class Approximator(Agent):
         self.gamma = None
         self.alpha = None
         self.eps = None
+        self.a_eps = None
         self.explore_starts = False
+
+        # Tile coding
+        self.num_tiles = None
+        self.tile_frac = None
 
     def init_train(self, save_params):
         # Save parameters
@@ -741,27 +752,33 @@ class Approximator(Agent):
                 'algo': self.algo,
                 'num_ep': self.num_ep,
                 'gamma': self.gamma,
-                'alpha': self.alpha
+                'alpha': self.alpha,
+                'eps': self.eps,
+                'a_eps': self.a_eps,
+                'explore_starts': self.explore_starts,
             })
         
         # Initialise model data
+        self.config(['num_tiles', 'tile_frac'])
+        self.d = (self.tile_frac + 1) ** 2 * self.num_tiles
         self.w = np.zeros(self.d)
 
     def init_ep(self):
-        s = self.state_to_index(random.choice(self.starts))
-        if self.explore_starts:
-            s = random.randint(0, self.size - 1)
+        s = [np.random.uniform(bound[0], bound[1]) for bound in self.start_bounds]
         a = self.get_action(s)
         return s, a
 
     def train(self,
         algo,
         num_ep,
-        dim=1,
         gamma=1.0,
         alpha=0.1,
         eps=0.1,
+        a_eps=0.1,
         explore_starts=False,
+        num_tiles=1,
+        tile_frac=1,
+        batch_size=1,
         save_params=True,
         save_time=True,
     ):
@@ -770,21 +787,58 @@ class Approximator(Agent):
             for x in self.algos:
                 print(f'- {x}')
             return
-        self.d = dim
         self.algo = algo
         self.num_ep = num_ep
         self.gamma = gamma
-        self.alpha = alpha
+        self.alpha = alpha / num_tiles
         self.eps = eps
+        self.a_eps = a_eps
         self.explore_starts = explore_starts
+        self.num_tiles = num_tiles
+        self.tile_frac = tile_frac
         self.init_train(save_params)
         if algo == 'td':
             self.td()
         elif algo == 'lstd':
             self.lstd()
+        elif algo == 'sarsa':
+            self.sarsa(batch_size)
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
     
+    def get_action(self, s):
+        if np.random.random() < self.eps:
+            return np.random.randint(len(self.base_actions))
+        else:
+            temp = [self.q(s, a) for a in range(len(self.base_actions))]
+            return random_argmax(temp)
+
+    def sarsa(self, batch_size):
+        ep = 0
+        while ep < self.num_ep:
+            start_time = time.time()
+            for _ in range(batch_size):
+                self.sarsa_ep()
+                ep += 1
+            end_time = time.time()
+            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+
+    def sarsa_ep(self):
+        s, a = self.init_ep()
+        steps = 0
+        while s != -1:
+            new_s, reward = self.next_state(s, a)
+            if new_s == -1:
+                self.w += self.alpha * (reward - self.q(s, a)) * self.q_prime(s, a)
+                s = new_s
+            else:
+                new_a = self.get_action(new_s)
+                self.w += self.alpha * (reward + self.gamma * self.q(new_s, new_a) - self.q(s, a)) \
+                    * self.q_prime(s, a)
+                s, a = new_s, new_a
+            steps += 1
+        return steps
+
     def td(self):
         ep = 0
         while ep < self.num_ep:
@@ -792,14 +846,14 @@ class Approximator(Agent):
             ep += 1
 
     def td_ep(self):
-        s = self.init_ep()
-        while s < self.size:
+        s, a = self.init_ep()
+        while s != -1:
             a = self.pi[s]
             new_s, reward = self.next_state(s, a)
-            w += self.alpha * (reward + self.gamma * self.v(new_s) - self.v(s)) * self.v_prime(s)
+            self.w += self.alpha * (reward + self.gamma * self.v(new_s) - self.v(s)) * self.v_prime(s)
     
     def lstd(self):
-        a_inv = (1 / self.eps) * np.identity(self.d)
+        a_inv = (1 / self.a_eps) * np.identity(self.d)
         b = np.zeros(self.d).transpose()
         ep = 0
         while ep < self.num_ep:
@@ -809,27 +863,60 @@ class Approximator(Agent):
     def lstd_ep(self, a_inv, b):
         s, a = self.init_ep()
         x = self.x[s]
-        while s < self.size:
+        while s != -1:
             a = self.pi[s]
             new_s, reward = self.next_state(s, a)
             new_x = self.x[new_s]
             v = (a_inv.transpose() * (x - self.gamma * new_x)).transpose()
             a_inv -= (a_inv * x * v) / (1 + v * x) # sherman-morrison
             b += reward * x
-            w = a_inv * b
+            self.w = a_inv * b
             s, x = new_s, new_x
         return a_inv, b
 
     def v(self, s):
-        return np.dot(self.w, self.x[s])
+        if s == -1:
+            return 0
+        res = 0
+        tiles = self.get_tile_coding(s)
+        for tile in tiles:
+            res += self.w[tile]
+        return res
 
     def v_prime(self, s):
-        return self.x[s]
+        x = np.zeros(self.d)
+        if s == -1:
+            return x
+        tiles = self.get_tile_coding(s)
+        for tile in tiles:
+            x[tile] = 1
+        return x
+    
+    def q(self, s, a):
+        new_s, reward = self.next_state(s, a)
+        return reward + self.gamma * self.v(new_s)
+
+    def q_prime(self, s, a):
+        new_s, _ = self.next_state(s, a)
+        return self.gamma * self.v_prime(new_s)
+
+    def get_tile_coding(self, s):
+        res = []
+        for i in range(self.num_tiles):
+            idx = i * (self.tile_frac + 1) ** 2
+            mult = 1
+            for s_i, bound in zip(s, self.bounds):
+                l = bound[1] - bound[0]
+                tile_size = l / self.tile_frac
+                cur = int(np.floor((s_i + i * tile_size / self.num_tiles - bound[0]) / tile_size))
+                idx += cur * mult
+                mult *= self.tile_frac + 1
+            res.append(idx)
+        return res
 
     @abstractmethod
     def next_state(self, s, a):
         pass
-
 
 
 def random_argmax(arr):
