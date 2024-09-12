@@ -737,8 +737,10 @@ class Approximator(Agent):
         # Training parameters
         self.algo = None
         self.num_ep = None
+        self.num_steps = None
         self.gamma = None
         self.alpha = None
+        self.beta = None
         self.eps = None
         self.a_eps = None
         self.explore_starts = False
@@ -753,8 +755,10 @@ class Approximator(Agent):
             self.config_meta({
                 'algo': self.algo,
                 'num_ep': self.num_ep,
+                'num_steps': self.num_steps,
                 'gamma': self.gamma,
                 'alpha': self.alpha,
+                'beta': self.beta,
                 'eps': self.eps,
                 'a_eps': self.a_eps,
                 'explore_starts': self.explore_starts,
@@ -772,9 +776,11 @@ class Approximator(Agent):
 
     def train(self,
         algo,
-        num_ep,
+        num_ep=1,
+        num_steps=1,
         gamma=1.0,
         alpha=0.1,
+        beta=0.1,
         eps=0.1,
         a_eps=0.1,
         explore_starts=False,
@@ -791,8 +797,10 @@ class Approximator(Agent):
             return
         self.algo = algo
         self.num_ep = num_ep
+        self.num_steps = num_steps
         self.gamma = gamma
         self.alpha = alpha / num_tiles
+        self.beta = beta,
         self.eps = eps
         self.a_eps = a_eps
         self.explore_starts = explore_starts
@@ -804,11 +812,16 @@ class Approximator(Agent):
         elif algo == 'lstd':
             self.lstd()
         elif algo == 'sarsa':
-            self.sarsa(batch_size)
+            if num_steps is None:
+                self.sarsa(batch_size)
+            else:
+                self.sarsa_cont()
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
     
     def get_action(self, s, eps=None):
+        if s == -1:
+            return 0
         if eps is None:
             eps = self.eps
         if np.random.random() < eps:
@@ -829,22 +842,33 @@ class Approximator(Agent):
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         graph(steps_list, 'Num steps', 'Episode')
-
+    
     def sarsa_ep(self):
         s, a = self.init_ep()
         steps = 0
         while s != -1:
             new_s, reward = self.next_state(s, a)
-            if new_s == -1:
-                self.w += self.alpha * (reward - self.q(s, a)) * self.q_prime(s, a)
-                s = new_s
-            else:
-                new_a = self.get_action(new_s)
-                self.w += self.alpha * (reward + self.gamma * self.q(new_s, new_a) - self.q(s, a)) \
-                    * self.q_prime(s, a)
-                s, a = new_s, new_a
+            new_a = self.get_action(new_s)
+            self.w += self.alpha * (reward + self.q(new_s, new_a) - self.q(s, a)) * self.q_prime(s, a)
+            s, a = new_s, new_a
             steps += 1
         return steps
+    
+    def sarsa_cont(self):
+        s, a = self.init_ep()
+        avg_reward = 0
+        step = 0
+        while step < self.num_steps:
+            new_s, reward = self.next_state(s, a)
+            new_a = self.get_action(new_s)
+
+            error = reward - avg_reward + self.q(new_s, new_a) - self.q(s, a)
+            avg_reward += self.beta * error
+
+            self.w += self.alpha * error * self.q_prime(s, a)
+
+            s, a = new_s, new_a
+            step += 1
 
     def td(self):
         ep = 0
@@ -891,19 +915,23 @@ class Approximator(Agent):
         return res
 
     def v_prime(self, s: list):
-        x = np.zeros(self.d)
         if s == -1:
-            return x
+            return np.zeros(self.d)
+        x = np.zeros(self.d)
         tiles = self.get_tile_coding(s)
         for tile in tiles:
             x[tile] = 1
         return x
     
     def q(self, s: list, a: int):
+        if s == -1:
+            return 0
         new_s, reward = self.next_state(s, a)
         return reward + self.gamma * self.v(new_s)
 
     def q_prime(self, s: list, a: int):
+        if s == -1:
+            return np.zeros(self.d)
         new_s, _ = self.next_state(s, a)
         return self.gamma * self.v_prime(new_s)
 
