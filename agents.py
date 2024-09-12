@@ -37,7 +37,7 @@ class Agent(ABC):
                 self._data.insert(0, val)
     
     def config_meta(self, data):
-        for val in reversed(data):
+        for val in data:
             self._metadata.update({val: data[val]})
 
     def load(self, file_name, load_actions=False):
@@ -729,10 +729,9 @@ class Approximator(Agent):
         self.start_bounds = start_bounds
 
         # Model data
-        self.config(['d', 'w', 'x'])
+        self.config(['d', 'w'])
         self.d = None
         self.w = []
-        self.x = []
 
         # Training parameters
         self.algo = None
@@ -746,6 +745,7 @@ class Approximator(Agent):
         self.explore_starts = False
 
         # Tile coding
+        self.config(['num_tiles', 'tile_frac'])
         self.num_tiles = None
         self.tile_frac = None
 
@@ -765,13 +765,12 @@ class Approximator(Agent):
             })
         
         # Initialise model data
-        self.config(['num_tiles', 'tile_frac'])
         self.d = (self.tile_frac + 1) ** 2 * self.num_tiles
         self.w = np.zeros(self.d)
 
-    def init_ep(self):
+    def init_ep(self, eps=None):
         s = [np.random.uniform(bound[0], bound[1]) for bound in self.start_bounds]
-        a = self.get_action(s)
+        a = self.get_action(s, eps)
         return s, a
 
     def train(self,
@@ -927,16 +926,15 @@ class Approximator(Agent):
         if s == -1:
             return 0
         new_s, reward = self.next_state(s, a)
-        return reward + self.gamma * self.v(new_s)
+        return reward + self.v(new_s)
 
     def q_prime(self, s: list, a: int):
         if s == -1:
             return np.zeros(self.d)
         new_s, _ = self.next_state(s, a)
-        return self.gamma * self.v_prime(new_s)
+        return self.v_prime(new_s)
 
     def get_tile_coding(self, s: list):
-        prec = 2
         res = []
         for i in range(self.num_tiles):
             idx = i * (self.tile_frac + 1) ** 2
@@ -946,7 +944,6 @@ class Approximator(Agent):
                 tile_size = l / self.tile_frac
                 cur_raw = (s_j + i * tile_size / self.num_tiles - bound[0]) / tile_size
                 cur = int(np.floor(cur_raw))
-                # print(cur_raw, cur)
                 idx += cur * mult
                 mult *= self.tile_frac + 1
             res.append(idx)
@@ -956,13 +953,21 @@ class Approximator(Agent):
         tmp = []
         for _ in range(num):
             steps = 0
-            s, a = self.init_ep()
+            s, a = self.init_ep(eps=0)
             while s != -1:
                 a = self.get_action(s, eps=0)
                 s, _ = self.next_state(s, a)
                 steps += 1
             tmp.append(steps)
         return np.average(tmp)
+
+    def save_convert(self):
+        super().save_convert()
+        self.w = self.w.tolist()
+    
+    def load_convert(self):
+        super().load_convert()
+        self.w = np.array(self.w)
 
     @abstractmethod
     def next_state(self, s, a):
