@@ -1,7 +1,10 @@
 import agents
+from utils import *
+
 import random, os
 from collections import deque
 import numpy as np
+
 import pygame
 from pygame.locals import *
 
@@ -12,11 +15,6 @@ SIZE = 15
 X = WIDTH // SIZE
 Y = HEIGHT // SIZE
 FPS = 60
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
 SQUARE_COLOURS = {
     'empty': BLACK,
     'track': WHITE,
@@ -81,13 +79,14 @@ class Square:
 
 
 class Racetrack(agents.Agent):
-    def __init__(self, track, start, finish, max_spe):
+    def __init__(self, track, start, finish, max_spe, remove_invalid_flag=True):
         super().__init__()
         self.config(['track', 'start', 'finish', 'max_spe'])
         self.track = track
         self.start = start
         self.finish = finish
         self.max_spe = max_spe
+        self.remove_invalid_flag = remove_invalid_flag
         self.core_init()
     
     def set_state_actions(self):
@@ -101,7 +100,8 @@ class Racetrack(agents.Agent):
         self.actions = [[(dx, dy) for dx in range(-1, 2) for dy in range(-1, 2)]
                         for _ in self.states]
         self.remove_infinite_actions()
-        self.remove_invalid_actions()
+        if self.remove_invalid_flag:
+            self.remove_invalid_actions()
         self.add_terminal_state()
     
     def remove_infinite_actions(self):

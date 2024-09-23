@@ -547,7 +547,7 @@ class Dyna(Agent):
         self.num_ep = None
         self.gamma = None
         self.alpha = None
-        self.eps = None
+        self.eps = 0
         self.kappa = None
         self.theta = None
         self.n = None
@@ -740,7 +740,7 @@ class Approximator(Agent):
         self.gamma = None
         self.alpha = None
         self.beta = None
-        self.eps = None
+        self.eps = 0
         self.a_eps = None
         self.explore_starts = False
 

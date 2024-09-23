@@ -21,7 +21,7 @@ class Car(DPAgent):
     def __init__(self, n=0, rent_cost=0, move_cost=0, lose_cost=0, l1_rent=0, l2_rent=0, l1_return=0, l2_return=0, max_move=INF):
         # Variables to save
         super().__init__()
-        self.configure(
+        self.config(
             ['n', 'rent_cost', 'move_cost', 'l1_rent', 'l2_rent', 'l1_return', 'l2_return', 'max_move']
         )
 

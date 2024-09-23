@@ -56,7 +56,7 @@ class Gambler(DPAgent):
                 coins += action
             else:
                 coins -= action
-        return self.n if coins >= n else 0
+        return self.n if coins >= self.n else 0
     
     def play(self):
         coins = random.randint(1, self.n - 1)
@@ -70,7 +70,7 @@ class Gambler(DPAgent):
             else:
                 coins -= action
                 print("\nYou lost the bet")
-        if coins >= n:
+        if coins >= self.n:
             print("You won!!! What a pro!!!")
         else:
             print("You lost all your coins noob")
@@ -89,7 +89,7 @@ class Gambler(DPAgent):
         return action
     
     def animate(self):
-        pl.plot([i for i in range(1, n)], [chad.actions[s][chad.pi[s]] for s in range(chad.size)])
+        pl.plot([i for i in range(1, self.n)], [chad.actions[s][chad.pi[s]] for s in range(chad.size)])
         pl.show()
 
 
@@ -100,8 +100,8 @@ def add_to_dict(_dict, _key, _value):
         _dict[_key] = _value
     return _dict
 
-n = 100
-chad = Gambler(n=n, ph=0.1)
+N = 100
+chad = Gambler(n=N, ph=0.1)
 chad.set_dynamics()
 chad.train('value', 1, 0.00001)
 # chad.save('gambler/ph=0.1')
