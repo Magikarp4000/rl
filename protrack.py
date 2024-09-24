@@ -6,13 +6,17 @@ import pygame
 from pygame.locals import *
 
 
-WIDTH = 500
-HEIGHT = 500
+pygame.init()
+info = pygame.display.Info()
+WIDTH = info.current_w
+HEIGHT = info.current_h
+BG_COLOUR = BLUE
+
 CAR_WIDTH = 20
 CAR_HEIGHT = 20
 
 ACCEL = 0.15
-ANG_ACCEL = 0.25
+ANG_ACCEL = 0.4
 
 KEY_MAP = {
     'angle': {
@@ -80,49 +84,53 @@ class ProCar():
         self.x = np.clip(self.x, 0, WIDTH)
         self.y = np.clip(self.y, 0, HEIGHT)
 
-        # self.rect.x = self.x - CAR_WIDTH / 2
-        # self.rect.y = self.y - CAR_HEIGHT / 2
-
         self.image = pygame.transform.rotate(self.clean_image, self.angle)
         self.rect = self.image.get_rect(center=(self.x, self.y))
 
 
-def get_user_action():
-    pressed = pygame.key.get_pressed()
-    d_spe = sum([KEY_MAP['speed'][k] for k in KEY_MAP['speed'] if pressed[k]])
-    d_angle = sum([KEY_MAP['angle'][k] for k in KEY_MAP['angle'] if pressed[k]])
-    return (d_spe, d_angle)
+class Game:
+    def __init__(self, width, height, bg_colour):
+        self.width = width
+        self.height = height
+        self.bg_colour = bg_colour
 
-def main_loop(fps=60, log=False):
-    pygame.init()
-    clock = pygame.time.Clock()
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    def get_user_action(self):
+        pressed = pygame.key.get_pressed()
+        d_spe = sum([KEY_MAP['speed'][k] for k in KEY_MAP['speed'] if pressed[k]])
+        d_angle = sum([KEY_MAP['angle'][k] for k in KEY_MAP['angle'] if pressed[k]])
+        return (d_spe, d_angle)
     
-    pro = ProCar()
+    def main(self, fps=60, log=False):
+        screen = pygame.display.set_mode((self.width, self.height))
+        clock = pygame.time.Clock()
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                running = False
-            if event.type == KEYDOWN:
-                if event.key == K_ESCAPE:
+        pro = ProCar()
+
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == QUIT:
                     running = False
-                if event.key == K_f:
-                    log = not log
-        
-        action = get_user_action()
-        if log:
-            print(f"{pro.log(2)} Action {action}")
-        
-        pro.update(action)
-        screen.fill(BLUE)
-        screen.blit(pro.image, pro.rect)
-        pygame.display.flip()
-        print(clock.get_fps())
-        clock.tick(fps)
-        
-    pygame.quit()
+                if event.type == KEYDOWN:
+                    if event.key == K_ESCAPE:
+                        running = False
+                    if event.key == K_f:
+                        log = not log
+            
+            action = self.get_user_action()
+            if log:
+                print(f"{pro.log(2)} Action {action}")
+                pygame.display.set_caption(f"FPS: {clock.get_fps()}")
+            
+            pro.update(action)
+            screen.fill(BLUE)
+            screen.blit(pro.image, pro.rect)
+            pygame.display.flip()
+            
+            clock.tick(fps)
+            
+        pygame.quit()
 
 
-main_loop(log=False)
+game = Game(WIDTH, HEIGHT, BG_COLOUR)
+game.main()
