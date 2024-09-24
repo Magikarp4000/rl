@@ -26,7 +26,7 @@ KEY_MAP = {
 
 
 class ProCar():
-    def __init__(self, x=None, y=None, spe=0, angle=0, ang_spe=0, max_spe=5, max_ang_spe=5, 
+    def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=5, max_ang_spe=3, 
                  friction=0.7, ang_friction=0.2):
         self.x = WIDTH / 2 if x is None else x
         self.y = HEIGHT / 2 if y is None else y
@@ -46,7 +46,13 @@ class ProCar():
         self.rect.y = self.y - CAR_HEIGHT / 2
         self.image.fill(RED)
 
-    def log(self):
+    def log(self, num_round=None):
+        if num_round is not None:
+            x = round(self.x, num_round)
+            y = round(self.y, num_round)
+            spe = round(self.spe, num_round)
+            angle = round(self.angle, num_round)
+            return f"x {x} y {y} Speed {spe} Angle {angle}"
         return f"x {self.x} y {self.y} Speed {self.spe} Angle {self.angle}"
 
     def update(self, action):
@@ -96,10 +102,12 @@ def main_loop(fps=60, log=False):
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
+                if event.key == K_f:
+                    log = not log
         
         action = get_user_action()
         if log:
-            print(f"{pro.log()} Action {action}")
+            print(f"{pro.log(2)} Action {action}")
         
         pro.update(action)
         screen.fill(BLACK)
@@ -110,4 +118,4 @@ def main_loop(fps=60, log=False):
     pygame.quit()
 
 
-main_loop(log=1)
+main_loop(log=False)
