@@ -25,13 +25,12 @@ class CarDisplay():
         if x != "t":
             self.rect.x = x * WIDTH - CAR_WIDTH / 2
             y = normalise_bounds(np.sin(np.pi * x), (0, 1))
-            print(x, y)
             self.rect.y = y * HEIGHT - CAR_HEIGHT / 2
 
 
 class Car(Approximator):
     def __init__(self, base_actions=[-1, 0, 1], bounds=[(-1, 1), (-1, 1)], start_bounds=[(-1, 1), (0, 0)]):
-        super().__init__(base_actions, bounds, start_bounds)
+        super().__init__(base_actions, bounds, start_bounds, dim=2)
         # User play
         self.move_map = {
             K_LEFT: -1,
@@ -67,10 +66,12 @@ class Car(Approximator):
         clock = pygame.time.Clock()
         screen = pygame.display.set_mode((WIDTH, HEIGHT))
         
-        s, a = self.init_ep(eps=0)
+        s = self.init_state()
+        init_s = s.copy()
         disp = CarDisplay(self.normalise(s))
 
         running = True
+        steps = 0
         while running:
             for event in pygame.event.get():
                 if event.type == QUIT:
@@ -78,6 +79,9 @@ class Car(Approximator):
                 if event.type == KEYDOWN:
                     if event.key == K_ESCAPE:
                         running = False
+                    if event.key == K_SPACE:
+                        s = init_s
+                        steps = 0
             
             if s == -1:
                 running = False
@@ -92,6 +96,7 @@ class Car(Approximator):
                 if log:
                     print(s, action)
                 s, _ = self.next_state(s, action=action)
+            steps += 1
 
             screen.fill(BLACK)
             disp.update(self.normalise(s))
@@ -100,6 +105,7 @@ class Car(Approximator):
             clock.tick(fps)
         
         pygame.quit()
+        print(f"Steps taken: {steps}")
 
     def get_user_action(self):
         pressed = pygame.key.get_pressed()
@@ -107,15 +113,15 @@ class Car(Approximator):
         return move
     
     def simulate(self, fps=60, log=False):
-        self.animate(fps, mode='AI')
+        self.animate(fps, 'AI', log)
     
     def play(self, fps=60, log=False):
-        self.animate(fps, mode='user')
+        self.animate(fps, 'user', log)
 
 
 car = Car(bounds=[(-1.2, 0.5), (-0.07, 0.07)], start_bounds=[(-0.6, -0.4), (0, 0)])
 car.load('mountain/v1.0')
-# car.train('sarsa', 500, gamma=1.0, alpha=0.4, eps=0.1, num_tiles=8, tile_frac=8, batch_size=10)
+# car.train('sarsa', 500, gamma=1.0, alpha=0.4, eps=0.1, num_layers=8, tile_frac=8, batch_size=10)
 # car.save('mountain/v1.0')
 # print(car.test(100))
 # car.simulate()

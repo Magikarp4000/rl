@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib import pyplot as pl
 
 import data_transfer
+from tilecoding import TileCoding
 
 
 class Agent(ABC):
@@ -717,7 +718,7 @@ class Dyna(Agent):
 
 
 class Approximator(Agent):
-    def __init__(self, base_actions=[], bounds=[], start_bounds=[], *args, **kwargs):
+    def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0, *args, **kwargs):
         super().__init__()
         # Base variables
         self.algos = ['td', 'qlearn', 'sarsa']
@@ -729,7 +730,8 @@ class Approximator(Agent):
         self.start_bounds = start_bounds
 
         # Model data
-        self.config(['d', 'w'])
+        self.config(['dim', 'd', 'w'])
+        self.dim = dim
         self.d = None
         self.w = []
 
@@ -745,9 +747,10 @@ class Approximator(Agent):
         self.explore_starts = False
 
         # Tile coding
-        self.config(['num_tiles', 'tile_frac'])
-        self.num_tiles = None
+        self.config(['num_layers', 'tile_frac'])
+        self.num_layers = None
         self.tile_frac = None
+        self.converter = None
 
     def init_train(self, save_params):
         # Save parameters
@@ -765,11 +768,15 @@ class Approximator(Agent):
             })
         
         # Initialise model data
-        self.d = (self.tile_frac + 1) ** 2 * self.num_tiles
+        self.d = (self.tile_frac + 1) ** 2 * self.num_layers
         self.w = np.zeros(self.d)
 
-    def init_ep(self, eps=None):
+    def init_state(self):
         s = [np.random.uniform(bound[0], bound[1]) for bound in self.start_bounds]
+        return s
+
+    def init_ep(self, eps=None):
+        s = self.init_state()
         a = self.get_action(s, eps)
         return s, a
 
@@ -783,7 +790,7 @@ class Approximator(Agent):
         eps=0.1,
         a_eps=0.1,
         explore_starts=False,
-        num_tiles=1,
+        num_layers=1,
         tile_frac=1,
         batch_size=1,
         save_params=True,
@@ -798,20 +805,23 @@ class Approximator(Agent):
         self.num_ep = num_ep
         self.num_steps = num_steps
         self.gamma = gamma
-        self.alpha = alpha / num_tiles
-        self.beta = beta,
+        self.alpha = alpha / num_layers
+        self.beta = beta
         self.eps = eps
         self.a_eps = a_eps
         self.explore_starts = explore_starts
-        self.num_tiles = num_tiles
+        self.num_layers = num_layers
         self.tile_frac = tile_frac
+        
         self.init_train(save_params)
+        self.converter = TileCoding(self.num_layers, self.dim, self.bounds,
+                                    [self.tile_frac] * self.dim, [1] * self.dim)
         if algo == 'td':
             self.td()
         elif algo == 'lstd':
             self.lstd()
         elif algo == 'sarsa':
-            if num_steps is None:
+            if num_ep is not None:
                 self.sarsa(batch_size)
             else:
                 self.sarsa_cont()
@@ -860,7 +870,7 @@ class Approximator(Agent):
         while step < self.num_steps:
             new_s, reward = self.next_state(s, a)
             new_a = self.get_action(new_s)
-
+            
             error = reward - avg_reward + self.q(new_s, new_a) - self.q(s, a)
             avg_reward += self.beta * error
 
@@ -908,7 +918,7 @@ class Approximator(Agent):
         if s == -1:
             return 0
         res = 0
-        tiles = self.get_tile_coding(s)
+        tiles = self.converter.encode(s)
         for tile in tiles:
             res += self.w[tile]
         return res
@@ -917,7 +927,7 @@ class Approximator(Agent):
         if s == -1:
             return np.zeros(self.d)
         x = np.zeros(self.d)
-        tiles = self.get_tile_coding(s)
+        tiles = self.converter.encode(s)
         for tile in tiles:
             x[tile] = 1
         return x
@@ -936,13 +946,13 @@ class Approximator(Agent):
 
     def get_tile_coding(self, s: list):
         res = []
-        for i in range(self.num_tiles):
+        for i in range(self.num_layers):
             idx = i * (self.tile_frac + 1) ** 2
             mult = 1
             for s_j, bound in zip(s, self.bounds):
                 l = bound[1] - bound[0]
                 tile_size = l / self.tile_frac
-                cur_raw = (s_j + i * tile_size / self.num_tiles - bound[0]) / tile_size
+                cur_raw = (s_j + i * tile_size / self.num_layers - bound[0]) / tile_size
                 cur = int(np.floor(cur_raw))
                 idx += cur * mult
                 mult *= self.tile_frac + 1
@@ -968,6 +978,8 @@ class Approximator(Agent):
     def load_convert(self):
         super().load_convert()
         self.w = np.array(self.w)
+        self.converter = TileCoding(self.num_layers, self.dim, self.bounds,
+                                    [self.tile_frac] * self.dim, [1] * self.dim)
 
     @abstractmethod
     def next_state(self, s, a):
