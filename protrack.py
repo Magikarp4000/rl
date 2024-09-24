@@ -8,8 +8,15 @@ from pygame.locals import *
 
 pygame.init()
 info = pygame.display.Info()
-WIDTH = info.current_w
-HEIGHT = info.current_h
+
+WIDTH = 500
+HEIGHT = 500
+PADDING = 20
+
+pygame.font.init()
+FONT_SIZE = 15
+FONT = pygame.font.SysFont('Arial', FONT_SIZE)
+
 BG_COLOUR = BLUE
 
 CAR_WIDTH = 20
@@ -31,7 +38,7 @@ KEY_MAP = {
 
 class ProCar():
     def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=10, max_ang_spe=5, 
-                 friction=0.7, ang_friction=0.5):
+                 friction=0.7, ang_friction=0.7):
         self.x = WIDTH / 2 if x is None else x
         self.y = HEIGHT / 2 if y is None else y
         self.spe = spe
@@ -52,15 +59,23 @@ class ProCar():
         self.rect = self.image.get_rect()
         self.rect.x = self.x - CAR_WIDTH / 2
         self.rect.y = self.y - CAR_HEIGHT / 2
-
+    
+    def get_data(self, num_round=None):
+        data = {
+            'x': safe_round(self.x, num_round),
+            'y': safe_round(self.y, num_round),
+            'Speed': safe_round(self.spe, num_round),
+            'Angle': safe_round(self.angle, num_round),
+            'Angular velocity': safe_round(self.ang_spe, num_round)
+        }
+        return data
+    
     def log(self, num_round=None):
-        if num_round is not None:
-            x = round(self.x, num_round)
-            y = round(self.y, num_round)
-            spe = round(self.spe, num_round)
-            angle = round(self.angle, num_round)
-            return f"x {x} y {y} Speed {spe} Angle {angle}"
-        return f"x {self.x} y {self.y} Speed {self.spe} Angle {self.angle}"
+        data = self.get_data(num_round)
+        res = ""
+        for key in data:
+            res += f"{key} {data[key]} "
+        return res.strip()
 
     def update(self, action):
         d_spe, d_ang_spe = action
@@ -88,6 +103,26 @@ class ProCar():
         self.rect = self.image.get_rect(center=(self.x, self.y))
 
 
+class Text:
+    def __init__(self):
+        self.images = []
+        self.rects = []
+    
+    def update(self, data):
+        self.images.clear()
+        self.rects.clear()
+
+        y = PADDING
+        for key in data:
+            text = f"{key}: {data[key]}"
+            image = FONT.render(text, False, BLACK)
+            self.images.append(image)
+
+            rect = image.get_rect(topleft = (PADDING, y))
+            self.rects.append(rect)
+            y += PADDING
+
+
 class Game:
     def __init__(self, width, height, bg_colour):
         self.width = width
@@ -99,13 +134,21 @@ class Game:
         d_spe = sum([KEY_MAP['speed'][k] for k in KEY_MAP['speed'] if pressed[k]])
         d_angle = sum([KEY_MAP['angle'][k] for k in KEY_MAP['angle'] if pressed[k]])
         return (d_spe, d_angle)
-    
+
+    def get_info(self, sprite, clock, num_round=None):
+        info = {
+            'FPS': safe_round(clock.get_fps(), num_round)
+        }
+        info.update(sprite.get_data(num_round))
+        return info
+
     def main(self, fps=60, log=False):
         screen = pygame.display.set_mode((self.width, self.height))
         clock = pygame.time.Clock()
 
         pro = ProCar()
-
+        pro_text = Text()
+        
         running = True
         while running:
             for event in pygame.event.get():
@@ -121,16 +164,26 @@ class Game:
             if log:
                 print(f"{pro.log(2)} Action {action}")
                 pygame.display.set_caption(f"FPS: {clock.get_fps()}")
-            
+
             pro.update(action)
+            pro_text.update(self.get_info(pro, clock, 2))
+
             screen.fill(BLUE)
+            
             screen.blit(pro.image, pro.rect)
+            for image, rect in zip(pro_text.images, pro_text.rects):
+                screen.blit(image, rect)
             pygame.display.flip()
             
             clock.tick(fps)
             
         pygame.quit()
 
+
+def safe_round(x, num_round):
+    if num_round is None:
+        return x
+    return round(x, num_round)
 
 game = Game(WIDTH, HEIGHT, BG_COLOUR)
 game.main()
