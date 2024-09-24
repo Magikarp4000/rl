@@ -12,7 +12,7 @@ CAR_WIDTH = 20
 CAR_HEIGHT = 20
 
 ACCEL = 0.15
-ANG_ACCEL = 0.5
+ANG_ACCEL = 0.25
 
 KEY_MAP = {
     'angle': {
@@ -26,8 +26,8 @@ KEY_MAP = {
 
 
 class ProCar():
-    def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=5, max_ang_spe=3, 
-                 friction=0.7, ang_friction=0.2):
+    def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=10, max_ang_spe=5, 
+                 friction=0.7, ang_friction=0.5):
         self.x = WIDTH / 2 if x is None else x
         self.y = HEIGHT / 2 if y is None else y
         self.spe = spe
@@ -40,11 +40,14 @@ class ProCar():
         self.friction = friction
         self.ang_friction = ang_friction
 
-        self.image = pygame.Surface((CAR_WIDTH, CAR_HEIGHT))
+        self.image = pygame.image.load("racetrack/assets/car.png").convert_alpha()
+        self.image = pygame.transform.flip(self.image, False, True)
+        self.image = pygame.transform.scale(self.image, (CAR_WIDTH, CAR_HEIGHT))
+        self.clean_image = self.image.copy()
+        
         self.rect = self.image.get_rect()
         self.rect.x = self.x - CAR_WIDTH / 2
         self.rect.y = self.y - CAR_HEIGHT / 2
-        self.image.fill(RED)
 
     def log(self, num_round=None):
         if num_round is not None:
@@ -56,12 +59,12 @@ class ProCar():
         return f"x {self.x} y {self.y} Speed {self.spe} Angle {self.angle}"
 
     def update(self, action):
-        d_spe, d_angle = action
+        d_spe, d_ang_spe = action
 
         self.spe += d_spe - self.friction * ACCEL
         self.spe = np.clip(self.spe, self.min_spe, self.max_spe)
         
-        self.ang_spe += d_angle
+        self.ang_spe += d_ang_spe
         raw_ang_spe = abs(self.ang_spe)
         raw_ang_spe = np.clip(raw_ang_spe - self.ang_friction * ANG_ACCEL, 0, None)
         self.ang_spe = raw_ang_spe if self.ang_spe >= 0 else -raw_ang_spe
@@ -77,8 +80,11 @@ class ProCar():
         self.x = np.clip(self.x, 0, WIDTH)
         self.y = np.clip(self.y, 0, HEIGHT)
 
-        self.rect.x = self.x - CAR_WIDTH / 2
-        self.rect.y = self.y - CAR_HEIGHT / 2
+        # self.rect.x = self.x - CAR_WIDTH / 2
+        # self.rect.y = self.y - CAR_HEIGHT / 2
+
+        self.image = pygame.transform.rotate(self.clean_image, self.angle)
+        self.rect = self.image.get_rect(center=(self.x, self.y))
 
 
 def get_user_action():
@@ -110,9 +116,10 @@ def main_loop(fps=60, log=False):
             print(f"{pro.log(2)} Action {action}")
         
         pro.update(action)
-        screen.fill(BLACK)
+        screen.fill(BLUE)
         screen.blit(pro.image, pro.rect)
         pygame.display.flip()
+        print(clock.get_fps())
         clock.tick(fps)
         
     pygame.quit()
