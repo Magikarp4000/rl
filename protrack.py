@@ -19,8 +19,8 @@ FONT = pygame.font.SysFont('Arial', FONT_SIZE)
 
 BG_COLOUR = WHITE
 
-CAR_WIDTH = 20
-CAR_HEIGHT = 20
+CAR_WIDTH = 30
+CAR_HEIGHT = 30
 
 ACCEL = 0.15
 ANG_ACCEL = 0.4
@@ -37,7 +37,7 @@ KEY_MAP = {
 
 
 class ProCar():
-    def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=7.5, max_ang_spe=5, 
+    def __init__(self, x=None, y=None, spe=0, angle=0, ang_spe=0, max_spe=7.5, max_ang_spe=5, 
                  friction=0.7, ang_friction=0.7):
         self.x = WIDTH / 2 if x is None else x
         self.y = HEIGHT / 2 if y is None else y
@@ -92,7 +92,7 @@ class ProCar():
         self.angle += self.ang_spe
         self.angle = (self.angle + 360) % 360
 
-        dx, dy = vectorise(self.spe, self.angle)
+        dx, dy = vectorise(self.spe, 90 - self.angle)
 
         self.x += dx
         self.y += dy
@@ -153,9 +153,9 @@ class Game:
                         log = not log
             
             action = self.get_user_action()
+
             if log:
-                print(f"{pro.log(2)} Action {action}")
-                pygame.display.set_caption(f"FPS: {clock.get_fps()}")
+                print(f"{pro.log(2)} Action {action} FPS {clock.get_fps()}")
 
             pro.update(action)
             pro_text.update(self.get_info(pro, clock, 2))
