@@ -1,4 +1,5 @@
 import numpy as np
+import pygame
 
 
 BLACK = (0, 0, 0)
@@ -6,6 +7,24 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+
+
+def multitext(text, x, y, spacing, font, colour, antialias=False):
+    images = []
+    rects = []
+
+    lines = text.split("\n")
+    for line in lines:
+        image = font.render(line, antialias, colour)
+        images.append(image)
+
+        rect = image.get_rect(topleft = (x, y))
+        rects.append(rect)
+
+        y += spacing
+    
+    return images, rects
+
 
 def normalise_bounds(x, b):
     try:

@@ -17,7 +17,7 @@ pygame.font.init()
 FONT_SIZE = 15
 FONT = pygame.font.SysFont('Arial', FONT_SIZE)
 
-BG_COLOUR = BLUE
+BG_COLOUR = WHITE
 
 CAR_WIDTH = 20
 CAR_HEIGHT = 20
@@ -37,7 +37,7 @@ KEY_MAP = {
 
 
 class ProCar():
-    def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=10, max_ang_spe=5, 
+    def __init__(self, x=None, y=None, spe=0, angle=180, ang_spe=0, max_spe=7.5, max_ang_spe=5, 
                  friction=0.7, ang_friction=0.7):
         self.x = WIDTH / 2 if x is None else x
         self.y = HEIGHT / 2 if y is None else y
@@ -109,18 +109,10 @@ class Text:
         self.rects = []
     
     def update(self, data):
-        self.images.clear()
-        self.rects.clear()
-
-        y = PADDING
+        text = ""
         for key in data:
-            text = f"{key}: {data[key]}"
-            image = FONT.render(text, False, BLACK)
-            self.images.append(image)
-
-            rect = image.get_rect(topleft = (PADDING, y))
-            self.rects.append(rect)
-            y += PADDING
+            text += f"{key}: {data[key]}\n"
+        self.images, self.rects = multitext(text, PADDING, PADDING, PADDING, FONT, BLACK)
 
 
 class Game:
@@ -168,7 +160,7 @@ class Game:
             pro.update(action)
             pro_text.update(self.get_info(pro, clock, 2))
 
-            screen.fill(BLUE)
+            screen.fill(self.bg_colour)
             
             screen.blit(pro.image, pro.rect)
             for image, rect in zip(pro_text.images, pro_text.rects):
