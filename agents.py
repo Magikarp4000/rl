@@ -783,7 +783,7 @@ class Approximator(Agent):
     def train(self,
         algo,
         num_ep=1,
-        num_steps=1,
+        num_steps=None,
         gamma=1.0,
         alpha=0.1,
         beta=0.1,
@@ -815,13 +815,13 @@ class Approximator(Agent):
         
         self.init_train(save_params)
         self.converter = TileCoding(self.num_layers, self.dim, self.bounds,
-                                    [self.tile_frac] * self.dim, [1] * self.dim)
+                                    [self.tile_frac] * self.dim, [1, 3])
         if algo == 'td':
             self.td()
         elif algo == 'lstd':
             self.lstd()
         elif algo == 'sarsa':
-            if num_ep is not None:
+            if num_steps is None:
                 self.sarsa(batch_size)
             else:
                 self.sarsa_cont()
@@ -944,27 +944,12 @@ class Approximator(Agent):
         new_s, _ = self.next_state(s, a)
         return self.v_prime(new_s)
 
-    def get_tile_coding(self, s: list):
-        res = []
-        for i in range(self.num_layers):
-            idx = i * (self.tile_frac + 1) ** 2
-            mult = 1
-            for s_j, bound in zip(s, self.bounds):
-                l = bound[1] - bound[0]
-                tile_size = l / self.tile_frac
-                cur_raw = (s_j + i * tile_size / self.num_layers - bound[0]) / tile_size
-                cur = int(np.floor(cur_raw))
-                idx += cur * mult
-                mult *= self.tile_frac + 1
-            res.append(idx)
-        return res
-
-    def test(self, num=1):
+    def test(self, num=1, max_step=None):
         tmp = []
         for _ in range(num):
             steps = 0
             s, a = self.init_ep(eps=0)
-            while s != -1:
+            while s != -1 and (max_step is None or steps < max_step):
                 a = self.get_action(s, eps=0)
                 s, _ = self.next_state(s, a)
                 steps += 1

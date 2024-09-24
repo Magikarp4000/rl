@@ -33,7 +33,7 @@ class TileCoding:
                 length = cur_bounds[1] - cur_bounds[0]
                 size = length / self.num_per_dim[j]
 
-                offset = i * size * self.offsets[j] / self.n
+                offset = (i * self.offsets[j] * (size / self.n)) % size
                 cur_raw = (state[j] + offset - cur_bounds[0]) / size
                 cur = int(np.floor(cur_raw))
 
@@ -55,8 +55,3 @@ class TileCoding:
             
             decoding.append(cur_decoding)
         return decoding
-
-
-# tile = TileCoding(4, 2, [(0, 8), (-1, 1)], [4, 4], [1, 1])
-# code = tile.encode([2.5, -0.7])
-# print(tile.decode(code))
