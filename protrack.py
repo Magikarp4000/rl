@@ -67,11 +67,11 @@ class ProCar():
     
     def get_data(self, num_round=None):
         data = {
-            'x': safe_round(self.x, num_round),
-            'y': safe_round(self.y, num_round),
-            'Speed': safe_round(self.spe, num_round),
-            'Angle': safe_round(self.angle, num_round),
-            'Angular velocity': safe_round(self.ang_spe, num_round)
+            'x': force_round(self.x, num_round),
+            'y': force_round(self.y, num_round),
+            'Speed': force_round(self.spe, num_round),
+            'Angle': force_round(self.angle, num_round),
+            'Angular velocity': force_round(self.ang_spe, num_round)
         }
         return data
     
@@ -142,7 +142,9 @@ class StateText:
         self.rects = []
     
     def update(self, text):
-        self.images, self.rects = multitext(text, WIDTH - PADDING, PADDING, PADDING, FONT, BLACK, 'topright')
+        self.images, self.rects = multitext(text, WIDTH - PADDING, PADDING, PADDING, 
+                                            FONT, BLACK, 'topright')
+
 
 class Game:
     def __init__(self, width, height, bg_colour):
@@ -158,16 +160,17 @@ class Game:
 
     def get_info(self, sprite, clock, num_round=None):
         info = {
-            'FPS': safe_round(clock.get_fps(), num_round)
+            'FPS': force_round(clock.get_fps(), num_round)
         }
         info.update(sprite.get_data(num_round))
         return info
     
     def get_state_info(self, model, state, num_round=None):
         info = f"State value: {safe_round(model.v(state), num_round)}\n"
-        raw_info = [(action, model.q(state, a)) for a, action in enumerate(model.base_actions)]
+        raw_info = [(model.q(state, a), action) for a, action in enumerate(model.base_actions)]
+        raw_info.sort(reverse=True)
         for action_value in raw_info:
-            info += f"{action_value[0]}: {safe_round(action_value[1], num_round)}\n"
+            info += f"{model.map_action(action_value[1])}: {force_round(action_value[0], num_round)}\n"
         return info
 
     def main(self, mode='AI', load_file=None, fps=60, log=False):
@@ -242,7 +245,24 @@ class ProtrackModel(Approximator):
         self.ang_accel = ang_accel
         self.friction = friction
         self.ang_friction = ang_friction
-    
+
+        self.action_map = self.get_action_map()
+
+    def get_action_map(self):
+        action_map = [
+            {self.accel: '\u2191', 0: '\u25CF'},
+            {-self.ang_accel: '\u2190', 0: '\u25CF', self.ang_accel: '\u2192'}
+        ]
+        return action_map
+
+    def map_action(self, action):
+        res = ""
+        for i, comp in enumerate(action):
+            res += self.action_map[i][comp]
+            if i < len(action) - 1:
+                res += "  "
+        return res
+
     def set_state_actions(self):
         return
 
@@ -280,10 +300,14 @@ class ProtrackModel(Approximator):
             new_state = TERMINAL
         
         return new_state, reward
+    
+    def load_convert(self):
+        super().load_convert()
+        self.action_map = self.get_action_map()
 
 
 game = Game(WIDTH, HEIGHT, BG_COLOUR)
-game.main(load_file='protrack/v1.1')
+game.main(mode='user', load_file='protrack/v1.1')
 
 # model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
 #                       [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],

@@ -52,3 +52,14 @@ def safe_round(x, num_round):
     if not isinstance(num_round, int):
         return x
     return round(x, num_round)
+
+def force_round(x, num_round):
+    x = safe_round(x, num_round)
+    x_str = str(x)
+    try:
+        length = len(x_str.split('.')[1])
+    except IndexError:
+        length = 0
+        x_str += '.'
+    x_str += '0' * max(0, num_round - length)
+    return x_str
