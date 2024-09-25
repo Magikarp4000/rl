@@ -233,6 +233,7 @@ class ProtrackModel(Approximator):
 
 model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
                       [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
-                      [[0, 0], [0, HEIGHT], [0, 0], [0, 0], [0, 0]],
+                      [[0, 0], [0, HEIGHT], [0, 0], [0, 360], [0, 0]],
                       )
-model.train('sarsa', 500, num_per_dim=[8, 8, 8, 8, 8], offsets=[1, 3, 5, 7, 9])
+model.train('sarsa', 500, num_layers=16, num_per_dim=[8, 8, 8, 8, 8], offsets=[1, 3, 5, 7, 9])
+model.save('protrack/v1.0')

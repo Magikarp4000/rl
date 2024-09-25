@@ -1,5 +1,6 @@
 import random, time, datetime, heapq
 from abc import ABC, abstractmethod
+import json
 
 import numpy as np
 from matplotlib import pyplot as pl
@@ -63,11 +64,16 @@ class Agent(ABC):
     def save(self, file_name):
         self.save_convert()
         to_save = {'metadata': self._metadata}
-        for val in self._data:
+        for name in self._data:
             try:
-                to_save[val] = getattr(self, val)
+                value = getattr(self, name)
+                json.dumps(value)
+                to_save[name] = value
+            except TypeError:
+                print(f"SAVE_WARNING: '{name}' (type {type(value)}) is not JSON serializable!")
             except AttributeError:
-                print(f"SAVE_ERROR: Attribute '{val}' doesn't exist!")
+                print(f"SAVE_WARNING: '{name}' doesn't exist!")
+            
         data_transfer.save(file_name, to_save)
 
     def load_convert(self):
@@ -753,7 +759,7 @@ class Approximator(Agent):
         self.explore_starts = False
 
         # Tile coding
-        self.config(['num_layers', 'tile_frac', 'num_per_dim', 'offsets'])
+        self.config(['num_layers', 'num_per_dim', 'offsets'])
         self.num_layers = None
         self.num_per_dim = None
         self.offsets = None
