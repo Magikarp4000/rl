@@ -8,6 +8,12 @@ import data_transfer
 from tilecoding import TileCoding
 
 
+# Constants
+TERMINAL = 'T'
+TERMINAL_REWARD = 0
+TERMINAL_ACTION = 0
+
+
 class Agent(ABC):
     def __init__(self, *args, **kwargs):
         # Model data
@@ -747,9 +753,10 @@ class Approximator(Agent):
         self.explore_starts = False
 
         # Tile coding
-        self.config(['num_layers', 'tile_frac'])
+        self.config(['num_layers', 'tile_frac', 'num_per_dim', 'offsets'])
         self.num_layers = None
-        self.tile_frac = None
+        self.num_per_dim = None
+        self.offsets = None
         self.converter = None
 
     def init_train(self, save_params):
@@ -767,8 +774,11 @@ class Approximator(Agent):
                 'explore_starts': self.explore_starts,
             })
         
+        # Tile coding
+        self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, self.offsets)
+        
         # Initialise model data
-        self.d = (self.tile_frac + 1) ** 2 * self.num_layers
+        self.d = self.converter.total_per_layer * self.num_layers
         self.w = np.zeros(self.d)
 
     def init_state(self):
@@ -791,7 +801,8 @@ class Approximator(Agent):
         a_eps=0.1,
         explore_starts=False,
         num_layers=1,
-        tile_frac=1,
+        num_per_dim=[],
+        offsets=[],
         batch_size=1,
         save_params=True,
         save_time=True,
@@ -811,11 +822,10 @@ class Approximator(Agent):
         self.a_eps = a_eps
         self.explore_starts = explore_starts
         self.num_layers = num_layers
-        self.tile_frac = tile_frac
+        self.num_per_dim = num_per_dim
+        self.offsets = offsets
         
         self.init_train(save_params)
-        self.converter = TileCoding(self.num_layers, self.dim, self.bounds,
-                                    [self.tile_frac] * self.dim, [1, 3])
         if algo == 'td':
             self.td()
         elif algo == 'lstd':
@@ -829,8 +839,8 @@ class Approximator(Agent):
             self.config_meta({'time': str(datetime.datetime.now())})
     
     def get_action(self, s, eps=None):
-        if s == -1:
-            return 0
+        if s == TERMINAL:
+            return TERMINAL_ACTION
         if eps is None:
             eps = self.eps
         if np.random.random() < eps:
@@ -855,7 +865,7 @@ class Approximator(Agent):
     def sarsa_ep(self):
         s, a = self.init_ep()
         steps = 0
-        while s != -1:
+        while s != TERMINAL:
             new_s, reward = self.next_state(s, a)
             new_a = self.get_action(new_s)
             self.w += self.alpha * (reward + self.q(new_s, new_a) - self.q(s, a)) * self.q_prime(s, a)
@@ -887,7 +897,7 @@ class Approximator(Agent):
 
     def td_ep(self):
         s, a = self.init_ep()
-        while s != -1:
+        while s != TERMINAL:
             a = self.pi[s]
             new_s, reward = self.next_state(s, a)
             self.w += self.alpha * (reward + self.gamma * self.v(new_s) - self.v(s)) * self.v_prime(s)
@@ -903,7 +913,7 @@ class Approximator(Agent):
     def lstd_ep(self, a_inv, b):
         s, a = self.init_ep()
         x = self.x[s]
-        while s != -1:
+        while s != TERMINAL:
             a = self.pi[s]
             new_s, reward = self.next_state(s, a)
             new_x = self.x[new_s]
@@ -915,7 +925,7 @@ class Approximator(Agent):
         return a_inv, b
 
     def v(self, s: list):
-        if s == -1:
+        if s == TERMINAL:
             return 0
         res = 0
         tiles = self.converter.encode(s)
@@ -924,7 +934,7 @@ class Approximator(Agent):
         return res
 
     def v_prime(self, s: list):
-        if s == -1:
+        if s == TERMINAL:
             return np.zeros(self.d)
         x = np.zeros(self.d)
         tiles = self.converter.encode(s)
@@ -933,13 +943,13 @@ class Approximator(Agent):
         return x
     
     def q(self, s: list, a: int):
-        if s == -1:
+        if s == TERMINAL:
             return 0
         new_s, reward = self.next_state(s, a)
         return reward + self.v(new_s)
 
     def q_prime(self, s: list, a: int):
-        if s == -1:
+        if s == TERMINAL:
             return np.zeros(self.d)
         new_s, _ = self.next_state(s, a)
         return self.v_prime(new_s)
@@ -949,7 +959,7 @@ class Approximator(Agent):
         for _ in range(num):
             steps = 0
             s, a = self.init_ep(eps=0)
-            while s != -1 and (max_step is None or steps < max_step):
+            while s != TERMINAL and (max_step is None or steps < max_step):
                 a = self.get_action(s, eps=0)
                 s, _ = self.next_state(s, a)
                 steps += 1
@@ -963,8 +973,7 @@ class Approximator(Agent):
     def load_convert(self):
         super().load_convert()
         self.w = np.array(self.w)
-        self.converter = TileCoding(self.num_layers, self.dim, self.bounds,
-                                    [self.tile_frac] * self.dim, [1] * self.dim)
+        self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, self.offsets)
 
     @abstractmethod
     def next_state(self, s, a):

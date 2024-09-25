@@ -22,7 +22,7 @@ class CarDisplay():
         self.image.fill(RED)
     
     def update(self, x):
-        if x != "t":
+        if x != TERMINAL:
             self.rect.x = x * WIDTH - CAR_WIDTH / 2
             y = normalise_bounds(np.sin(np.pi * x), (0, 1))
             self.rect.y = y * HEIGHT - CAR_HEIGHT / 2
@@ -38,8 +38,8 @@ class Car(Approximator):
         }
     
     def next_state(self, s, a=None, action=None):
-        if s == -1:
-            return -1, 0
+        if s == TERMINAL:
+            return TERMINAL, TERMINAL_REWARD
         if a is not None:
             action = self.base_actions[a]
         pos, vel = s
@@ -49,7 +49,7 @@ class Car(Approximator):
             new_vel = 0
         new_s = [new_pos, new_vel]
         if new_pos == self.bounds[0][1]:
-            new_s = -1
+            new_s = TERMINAL
         reward = -1
         return new_s, reward
 
@@ -57,8 +57,8 @@ class Car(Approximator):
         return
 
     def normalise(self, s):
-        if s == -1:
-            return "t"
+        if s == TERMINAL:
+            return TERMINAL
         return normalise_bounds(s[0], self.bounds[0])
 
     def animate(self, fps=60, mode='AI', log=False):
@@ -83,7 +83,7 @@ class Car(Approximator):
                         s = init_s
                         steps = 0
             
-            if s == -1:
+            if s == TERMINAL:
                 running = False
             
             if mode == 'AI':
@@ -121,10 +121,10 @@ class Car(Approximator):
 
 car = Car(bounds=[(-1.2, 0.5), (-0.07, 0.07)], start_bounds=[(-0.6, -0.4), (0, 0)])
 car.load('mountain/v1.0')
-car.train('sarsa', num_ep=100, gamma=1.0, alpha=0.4, eps=0.1, num_layers=8, tile_frac=8, batch_size=10)
+# car.train('sarsa', num_ep=100, gamma=1.0, alpha=0.4, eps=0.1, num_layers=8, tile_frac=8, batch_size=10)
 # car.save('mountain/v2.1')
-print(car.test(100))
-# car.simulate()
+# print(car.test(100))
+car.simulate()
 # car.play()
 # car.train('sarsa', 0, num_tiles=8, tile_frac=8)
 # print(car.get_tile_coding([-0.9879, -0.0525]))

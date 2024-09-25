@@ -1,6 +1,8 @@
 from utils import *
+from agents import *
 
 import numpy as np
+import itertools
 
 import pygame
 from pygame.locals import *
@@ -24,6 +26,9 @@ CAR_HEIGHT = 30
 
 ACCEL = 0.15
 ANG_ACCEL = 0.4
+
+FRICTION = 0.7
+ANG_FRICTION = 0.7
 
 KEY_MAP = {
     'angle': {
@@ -78,12 +83,12 @@ class ProCar():
         return res.strip()
 
     def update(self, action):
-        d_spe, d_ang_spe = action
+        accel, ang_accel = action
 
-        self.spe += d_spe - self.friction * ACCEL
+        self.spe += accel - self.friction * ACCEL
         self.spe = np.clip(self.spe, self.min_spe, self.max_spe)
         
-        self.ang_spe += d_ang_spe
+        self.ang_spe += ang_accel
         raw_ang_spe = abs(self.ang_spe)
         raw_ang_spe = np.clip(raw_ang_spe - self.ang_friction * ANG_ACCEL, 0, None)
         self.ang_spe = raw_ang_spe if self.ang_spe >= 0 else -raw_ang_spe
@@ -123,9 +128,9 @@ class Game:
 
     def get_user_action(self):
         pressed = pygame.key.get_pressed()
-        d_spe = sum([KEY_MAP['speed'][k] for k in KEY_MAP['speed'] if pressed[k]])
-        d_angle = sum([KEY_MAP['angle'][k] for k in KEY_MAP['angle'] if pressed[k]])
-        return (d_spe, d_angle)
+        accel = sum([KEY_MAP['speed'][k] for k in KEY_MAP['speed'] if pressed[k]])
+        ang_accel = sum([KEY_MAP['angle'][k] for k in KEY_MAP['angle'] if pressed[k]])
+        return (accel, ang_accel)
 
     def get_info(self, sprite, clock, num_round=None):
         info = {
@@ -172,10 +177,62 @@ class Game:
         pygame.quit()
 
 
-def safe_round(x, num_round):
-    if num_round is None:
-        return x
-    return round(x, num_round)
+class ProtrackModel(Approximator):
+    def __init__(self, accel, ang_accel, friction, ang_friction, bounds, start_bounds):
+        base_actions = list(itertools.product([accel, 0], [-ang_accel, 0, ang_accel]))
+        super().__init__(base_actions, bounds, start_bounds, 5)
 
-game = Game(WIDTH, HEIGHT, BG_COLOUR)
-game.main()
+        self.config(['accel', 'ang_accel', 'friction', 'ang_friction'])
+        self.accel = accel
+        self.ang_accel = ang_accel
+        self.friction = friction
+        self.ang_friction = ang_friction
+    
+    def set_state_actions(self):
+        return
+
+    def next_state(self, state, a=None, action=None):
+        if state == TERMINAL:
+            return TERMINAL, TERMINAL_REWARD
+        if a is not None:
+            action = self.base_actions[a]
+        
+        x, y, spe, angle, ang_spe = state
+        accel, ang_accel = action
+
+        spe += accel - self.friction * ACCEL
+        spe = np.clip(spe, self.bounds[2][0], self.bounds[2][1])
+        
+        ang_spe += ang_accel
+        raw_ang_spe = abs(ang_spe)
+        raw_ang_spe = np.clip(raw_ang_spe - self.ang_friction * ANG_ACCEL, 0, None)
+        ang_spe = raw_ang_spe if ang_spe >= 0 else -raw_ang_spe
+        ang_spe = np.clip(ang_spe, self.bounds[4][0], self.bounds[4][1])
+
+        angle += ang_spe
+        angle = (angle + 360) % 360
+
+        dx, dy = vectorise(spe, 90 - angle)
+
+        x += dx
+        y += dy
+        x = np.clip(x, self.bounds[0][0], self.bounds[0][1])
+        y = np.clip(y, self.bounds[1][0], self.bounds[1][1])
+
+        new_state = (x, y, spe, angle, ang_spe)
+        reward = -1
+        if x >= self.bounds[0][1]:
+            new_state = TERMINAL
+        
+        return new_state, reward
+
+
+
+# game = Game(WIDTH, HEIGHT, BG_COLOUR)
+# game.main()
+
+model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
+                      [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
+                      [[0, 0], [0, HEIGHT], [0, 0], [0, 0], [0, 0]],
+                      )
+model.train('sarsa', 500, num_per_dim=[8, 8, 8, 8, 8], offsets=[1, 3, 5, 7, 9])

@@ -40,3 +40,8 @@ def multitext(text, x, y, spacing, font, colour, antialias=False):
         y += spacing
     
     return images, rects
+
+def safe_round(x, num_round):
+    if not isinstance(num_round, int):
+        return x
+    return round(x, num_round)
