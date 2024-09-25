@@ -17,14 +17,14 @@ class TileCoding:
         self.bounds = bounds
         self.num_per_dim = num_per_dim
         self.offsets = offsets
-        self.total_per_layer = np.prod(np.array(self.num_per_dim) + 1)
+        self.total = int(np.prod(np.array(self.num_per_dim) + 1))
 
     def encode(self, state: list):
         assert(len(state) == self.dim)
 
         res = []
         for i in range(self.n):
-            encoding = i * self.total_per_layer
+            encoding = i * self.total
             multiplier = 1
 
             for j in range(self.dim):
@@ -46,7 +46,7 @@ class TileCoding:
         decoding = []
         for code in encoding:
 
-            mod_code = code % self.total_per_layer
+            mod_code = code % self.total
             cur_decoding = []
 
             for num in self.num_per_dim:

@@ -25,7 +25,7 @@ def polarise(dx, dy):
     angle = np.arctan(dy / dx)
     return magnitude, angle
 
-def multitext(text, x, y, spacing, font, colour, antialias=False):
+def multitext(text, x, y, spacing, font, colour, pos='topleft', antialias=False):
     images = []
     rects = []
 
@@ -34,7 +34,14 @@ def multitext(text, x, y, spacing, font, colour, antialias=False):
         image = font.render(line, antialias, colour)
         images.append(image)
 
-        rect = image.get_rect(topleft = (x, y))
+        if pos == 'topleft':
+            rect = image.get_rect(topleft = (x, y))
+        elif pos == 'topright':
+            rect = image.get_rect(topright = (x, y))
+        elif pos == 'bottomleft':
+            rect = image.get_rect(bottomleft = (x, y))
+        elif pos == 'bottomright':
+            rect = image.get_rect(bottomright = (x, y))
         rects.append(rect)
 
         y += spacing

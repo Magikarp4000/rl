@@ -81,8 +81,20 @@ class ProCar():
         for key in data:
             res += f"{key} {data[key]} "
         return res.strip()
+    
+    def reset(self, x=None, y=None, spe=None, angle=None, ang_spe=None):
+        if x is not None:
+            self.x = x
+        if y is not None:
+            self.y = y
+        if spe is not None:
+            self.spe = spe
+        if angle is not None:
+            self.angle = angle
+        if ang_spe is not None:
+            self.ang_spe = ang_spe
 
-    def update(self, action):
+    def update_pos(self, action):
         accel, ang_accel = action
 
         self.spe += accel - self.friction * ACCEL
@@ -104,11 +116,15 @@ class ProCar():
         self.x = np.clip(self.x, 0, WIDTH)
         self.y = np.clip(self.y, 0, HEIGHT)
 
+    def update(self, action=None):
+        if action is not None:
+            self.update_pos(action)
+        
         self.image = pygame.transform.rotate(self.clean_image, self.angle)
         self.rect = self.image.get_rect(center=(self.x, self.y))
 
 
-class Text:
+class InfoText:
     def __init__(self):
         self.images = []
         self.rects = []
@@ -117,8 +133,16 @@ class Text:
         text = ""
         for key in data:
             text += f"{key}: {data[key]}\n"
-        self.images, self.rects = multitext(text, PADDING, PADDING, PADDING, FONT, BLACK)
+        self.images, self.rects = multitext(text, PADDING, PADDING, PADDING, FONT, BLACK, 'topleft')
 
+
+class StateText:
+    def __init__(self):
+        self.images = []
+        self.rects = []
+    
+    def update(self, text):
+        self.images, self.rects = multitext(text, WIDTH - PADDING, PADDING, PADDING, FONT, BLACK, 'topright')
 
 class Game:
     def __init__(self, width, height, bg_colour):
@@ -138,14 +162,29 @@ class Game:
         }
         info.update(sprite.get_data(num_round))
         return info
+    
+    def get_state_info(self, model, state, num_round=None):
+        info = f"State value: {safe_round(model.v(state), num_round)}\n"
+        raw_info = [(action, model.q(state, a)) for a, action in enumerate(model.base_actions)]
+        for action_value in raw_info:
+            info += f"{action_value[0]}: {safe_round(action_value[1], num_round)}\n"
+        return info
 
-    def main(self, fps=60, log=False):
+    def main(self, mode='AI', load_file=None, fps=60, log=False):
         screen = pygame.display.set_mode((self.width, self.height))
         clock = pygame.time.Clock()
 
-        pro = ProCar()
-        pro_text = Text()
-        
+        model = ProtrackModel()
+        if load_file is not None:
+            model.load(load_file)
+        state = model.init_state()
+        pro = ProCar(*state)
+
+        texts = {
+            'info': InfoText(),
+            'state': StateText()
+        }
+
         running = True
         while running:
             for event in pygame.event.get():
@@ -156,20 +195,36 @@ class Game:
                         running = False
                     if event.key == K_f:
                         log = not log
-            
-            action = self.get_user_action()
+                    if event.key == K_SPACE:
+                        print("Reset")
+                        state = model.init_state()
+                        pro.reset(*state)
+
+            if state == TERMINAL:
+                print("Won!")
+                state = model.init_state()
+                pro.reset(*state)
+
+            if mode == 'AI':
+                action = model.base_actions[model.get_action(state, eps=0)]
+            elif mode == 'user':
+                action = self.get_user_action()
 
             if log:
                 print(f"{pro.log(2)} Action {action} FPS {clock.get_fps()}")
+            
+            state, _ = model.next_state(state, action=action)
 
             pro.update(action)
-            pro_text.update(self.get_info(pro, clock, 2))
-
+            texts['info'].update(self.get_info(pro, clock, 2))
+            texts['state'].update(self.get_state_info(model, state, 5))
+            
             screen.fill(self.bg_colour)
             
             screen.blit(pro.image, pro.rect)
-            for image, rect in zip(pro_text.images, pro_text.rects):
-                screen.blit(image, rect)
+            for text in texts.values():
+                for image, rect in zip(text.images, text.rects):
+                    screen.blit(image, rect)
             pygame.display.flip()
             
             clock.tick(fps)
@@ -178,7 +233,7 @@ class Game:
 
 
 class ProtrackModel(Approximator):
-    def __init__(self, accel, ang_accel, friction, ang_friction, bounds, start_bounds):
+    def __init__(self, accel=0, ang_accel=0, friction=0, ang_friction=0, bounds=[], start_bounds=[]):
         base_actions = list(itertools.product([accel, 0], [-ang_accel, 0, ang_accel]))
         super().__init__(base_actions, bounds, start_bounds, 5)
 
@@ -227,13 +282,11 @@ class ProtrackModel(Approximator):
         return new_state, reward
 
 
+game = Game(WIDTH, HEIGHT, BG_COLOUR)
+game.main(load_file='protrack/v1.1')
 
-# game = Game(WIDTH, HEIGHT, BG_COLOUR)
-# game.main()
-
-model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
-                      [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
-                      [[0, 0], [0, HEIGHT], [0, 0], [0, 360], [0, 0]],
-                      )
-model.train('sarsa', 500, num_layers=16, num_per_dim=[8, 8, 8, 8, 8], offsets=[1, 3, 5, 7, 9])
-model.save('protrack/v1.0')
+# model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
+#                       [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
+#                       [[0, 0], [0, HEIGHT], [0, 0], [0, 360], [0, 0]])
+# model.train('sarsa', 500, num_layers=8, num_per_dim=[8, 8, 8, 8, 8], offsets=[1, 3, 5, 7, 9])
+# model.save('protrack/v1.1')

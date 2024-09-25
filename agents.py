@@ -784,7 +784,7 @@ class Approximator(Agent):
         self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, self.offsets)
         
         # Initialise model data
-        self.d = self.converter.total_per_layer * self.num_layers
+        self.d = self.converter.total * self.num_layers
         self.w = np.zeros(self.d)
 
     def init_state(self):
@@ -806,7 +806,7 @@ class Approximator(Agent):
         eps=0.1,
         a_eps=0.1,
         explore_starts=False,
-        num_layers=1,
+        num_layers=8,
         num_per_dim=[],
         offsets=[],
         batch_size=1,
