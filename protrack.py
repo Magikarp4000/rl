@@ -174,13 +174,20 @@ class Game:
         return info
 
     def main(self, mode='AI', load_file=None, fps=60, log=False):
+        if mode == 'AI' and load_file is None:
+            print("GAME_ERROR: No load file!")
+            return
+        
         screen = pygame.display.set_mode((self.width, self.height))
         clock = pygame.time.Clock()
 
-        model = ProtrackModel()
+        model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
+                              [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
+                              [[0, 0], [0, HEIGHT], [0, 0], [0, 360], [0, 0]])
         if load_file is not None:
             model.load(load_file)
         state = model.init_state()
+
         pro = ProCar(*state)
 
         texts = {
@@ -203,7 +210,7 @@ class Game:
                         state = model.init_state()
                         pro.reset(*state)
 
-            if state == TERMINAL:
+            if model.is_terminal(state):
                 print("Won!")
                 state = model.init_state()
                 pro.reset(*state)
@@ -216,11 +223,15 @@ class Game:
             if log:
                 print(f"{pro.log(2)} Action {action} FPS {clock.get_fps()}")
             
-            state, _ = model.next_state(state, action=action)
+            if load_file is not None:
+                state, _ = model.next_state(state, action=action)
+            else:
+                state = list(pro.get_data().values())
 
             pro.update(action)
             texts['info'].update(self.get_info(pro, clock, 2))
-            texts['state'].update(self.get_state_info(model, state, 5))
+            if load_file is not None:
+                texts['state'].update(self.get_state_info(model, state, 5))
             
             screen.fill(self.bg_colour)
             
@@ -237,7 +248,7 @@ class Game:
 
 class ProtrackModel(Approximator):
     def __init__(self, accel=0, ang_accel=0, friction=0, ang_friction=0, bounds=[], start_bounds=[]):
-        base_actions = list(itertools.product([accel, 0], [-ang_accel, 0, ang_accel]))
+        base_actions = list(itertools.product([accel, 0], [0, -ang_accel, ang_accel]))
         super().__init__(base_actions, bounds, start_bounds, 5)
 
         self.config(['accel', 'ang_accel', 'friction', 'ang_friction'])
@@ -265,6 +276,11 @@ class ProtrackModel(Approximator):
 
     def set_state_actions(self):
         return
+
+    def is_terminal(self, state):
+        if state == TERMINAL or state[0] >= self.bounds[0][1]:
+            return True
+        return False
 
     def next_state(self, state, a=None, action=None):
         if state == TERMINAL:
@@ -296,7 +312,7 @@ class ProtrackModel(Approximator):
 
         new_state = (x, y, spe, angle, ang_spe)
         reward = -1
-        if x >= self.bounds[0][1]:
+        if self.is_terminal(new_state):
             new_state = TERMINAL
         
         return new_state, reward
@@ -307,10 +323,10 @@ class ProtrackModel(Approximator):
 
 
 game = Game(WIDTH, HEIGHT, BG_COLOUR)
-game.main(mode='user', load_file='protrack/v1.1')
+game.main(mode='user', load_file='protrack/v3.0')
 
 # model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
 #                       [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
-#                       [[0, 0], [0, HEIGHT], [0, 0], [0, 360], [0, 0]])
-# model.train('sarsa', 500, num_layers=8, num_per_dim=[8, 8, 8, 8, 8], offsets=[1, 3, 5, 7, 9])
-# model.save('protrack/v1.1')
+#                       [[0, 0], [HEIGHT / 2, HEIGHT / 2], [0, 0], [0, 0], [0, 0]])
+# model.train('sarsa', 500, num_layers=8, num_per_dim=[8] * 5, offsets=[1, 3, 5, 7, 9])
+# model.save('protrack/v3.0')

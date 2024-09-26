@@ -49,12 +49,15 @@ def multitext(text, x, y, spacing, font, colour, pos='topleft', antialias=False)
     return images, rects
 
 def safe_round(x, num_round):
-    if not isinstance(num_round, int):
+    try:
+        return round(x, num_round)
+    except:
         return x
-    return round(x, num_round)
 
 def force_round(x, num_round):
-    x = safe_round(x, num_round)
+    if not isinstance(num_round, int):
+        return x
+    x = round(x, num_round)
     x_str = str(x)
     try:
         length = len(x_str.split('.')[1])
