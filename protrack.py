@@ -173,7 +173,7 @@ class Game:
             info += f"{model.map_action(action_value[1])}: {force_round(action_value[0], num_round)}\n"
         return info
 
-    def main(self, mode='AI', load_file=None, fps=60, log=False):
+    def main(self, mode='AI', load_file=None, fps=60, eps=0, log=False):
         if mode == 'AI' and load_file is None:
             print("GAME_ERROR: No load file!")
             return
@@ -195,6 +195,7 @@ class Game:
             'state': StateText()
         }
 
+        wins = 0
         running = True
         while running:
             for event in pygame.event.get():
@@ -211,12 +212,13 @@ class Game:
                         pro.reset(*state)
 
             if model.is_terminal(state):
-                print("Won!")
+                wins += 1
+                print(f"Wins: {wins}!")
                 state = model.init_state()
                 pro.reset(*state)
 
             if mode == 'AI':
-                action = model.base_actions[model.get_action(state, eps=0)]
+                action = model.base_actions[model.get_action(state, eps=eps)]
             elif mode == 'user':
                 action = self.get_user_action()
 
@@ -241,14 +243,15 @@ class Game:
                     screen.blit(image, rect)
             pygame.display.flip()
             
-            clock.tick(fps)
+            if fps is not None:
+                clock.tick(fps)
             
         pygame.quit()
 
 
 class ProtrackModel(Approximator):
     def __init__(self, accel=0, ang_accel=0, friction=0, ang_friction=0, bounds=[], start_bounds=[]):
-        base_actions = list(itertools.product([accel, 0], [0, -ang_accel, ang_accel]))
+        base_actions = list(itertools.product([accel, 0], [-ang_accel, 0, ang_accel]))
         super().__init__(base_actions, bounds, start_bounds, 5)
 
         self.config(['accel', 'ang_accel', 'friction', 'ang_friction'])
@@ -322,11 +325,11 @@ class ProtrackModel(Approximator):
         self.action_map = self.get_action_map()
 
 
-game = Game(WIDTH, HEIGHT, BG_COLOUR)
-game.main(mode='user', load_file='protrack/v3.0')
-
 # model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
 #                       [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
-#                       [[0, 0], [HEIGHT / 2, HEIGHT / 2], [0, 0], [0, 0], [0, 0]])
+#                       [[0, 0], [HEIGHT / 2, HEIGHT / 2], [0, 0], [90, 90], [0, 0]])
 # model.train('sarsa', 500, num_layers=8, num_per_dim=[8] * 5, offsets=[1, 3, 5, 7, 9])
-# model.save('protrack/v3.0')
+# model.save('protrack/vB1.0')
+
+game = Game(WIDTH, HEIGHT, BG_COLOUR)
+game.main(mode='user', load_file='protrack/vB1.0', fps=60, eps=0)
