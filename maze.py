@@ -26,33 +26,35 @@ class Maze(Dyna):
         self.actions.append([(0, 0)])
 
     def next_state(self, s, a):
+        if s == self.terminal:
+            return self.terminal_action, self.terminal_reward
         x, y = self.states[s]
         dx, dy = self.actions[s][a]
         nx = x + dx
         ny = y + dy
         reward = -1
         if (nx, ny) in self.finish_set:
-            return self.size, reward
+            return self.terminal, reward
         if (nx, ny) not in self.cells_set:
             return s, reward
         new_s = self.state_to_index((nx, ny))
         return new_s, reward
     
-    def test(self, num_tests):
-        total_steps = 0
-        for _ in range(num_tests):
-            s, a = self.init_ep()
-            while s < self.size:
-                a = self.pi[s]
-                s, reward = self.next_state(s, a)
-                total_steps += 1
-        avg_steps = total_steps / num_tests
-        print(f"Avg num of steps: {avg_steps}")
+    # def test(self, num_tests):
+    #     total_steps = 0
+    #     for _ in range(num_tests):
+    #         s, a = self.init_ep()
+    #         while s < self.size:
+    #             a = self.pi[s]
+    #             s, reward = self.next_state(s, a)
+    #             total_steps += 1
+    #     avg_steps = total_steps / num_tests
+    #     print(f"Avg num of steps: {avg_steps}")
 
 
 cells, starts, finish = racetrack_utils.get_track()
 pro = Maze(cells, starts, finish)
 pro.load('maze/v0.2-alpha', load_actions=True)
-pro.train('q+', 10000, n=10, kappa=0.05, batch_size=1000)
+pro.train('q+', 1000, n=10, kappa=0.05, batch_size=1000)
 # pro.save('maze/v0.2-alpha')
-pro.test(10000)
+print(pro.test(1000))

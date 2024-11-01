@@ -9,35 +9,16 @@ import data_transfer
 from tilecoding import TileCoding
 
 
-# Constants
-TERMINAL = 'T'
-TERMINAL_REWARD = 0
-TERMINAL_ACTION = 0
-
-
 class Agent(ABC):
     def __init__(self, *args, **kwargs):
+        # Constants
+        self.terminal = 'T'
+        self.terminal_reward = 0
+        self.terminal_action = 0
+
         # Model data
         self._data = []
         self._metadata = {}
-
-        # Environment & agent data
-        self.states = []
-        self.actions = [[]]
-        self.size = 0
-        self.state_map = {}
-        self.starts = []
-    
-    def core_init(self, *args, **kwargs):
-        self.set_state_actions(*args, **kwargs)
-        self.size = len(self.states)
-        self.state_map = {self.states[s]: s for s in range(self.size)}
-
-    def state_to_index(self, state):
-        try:
-            return self.state_map[state]
-        except TypeError:
-            return self.state_map[tuple(state)]
 
     def config(self, data):
         for val in reversed(data):
@@ -82,15 +63,55 @@ class Agent(ABC):
     def save_convert(self):
         pass
 
-    def get_action(self, s):
+    def _single_test(self, max_step, eps):
+        steps = 0
+        s, a = self.init_episode()
+        while s != self.terminal and (max_step is None or steps < max_step):
+            a = self.get_action(s, eps=eps)
+            s, _ = self.next_state(s, a)
+            steps += 1
+        return steps
+
+    def test(self, num_steps=1, max_step=None, eps=0):
+        return np.mean([self._single_test(max_step, eps)] * num_steps)
+
+    @abstractmethod
+    def get_action(self, s, eps, *args, **kwargs):
         pass
 
     @abstractmethod
-    def set_state_actions(self):
+    def next_state(self, s, a, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def init_episode(self, *args, **kwargs):
         pass
 
 
-class DPAgent(Agent):
+class TabularAgent(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Environment & agent data
+        self.states = []
+        self.actions = [[]]
+        self.size = 0
+        self.state_map = {}
+        self.starts = []
+
+    def core_init(self, *args, **kwargs):
+        self.set_state_actions(*args, **kwargs)
+        self.size = len(self.states)
+        self.state_map = {self.states[s]: s for s in range(self.size)}
+
+    def state_to_index(self, state):
+        try:
+            return self.state_map[state]
+        except TypeError:
+            return self.state_map[tuple(state)]
+
+
+class DPAgent(TabularAgent):
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.config(['v', 'pi', 'v_record', 'pi_record'])
@@ -202,12 +223,18 @@ class DPAgent(Agent):
     def display(self, display_type):
         pass
 
+    def next_state(self, s, a):
+        pass
+
+    def init_episode(self, s, eps):
+        pass
+
     @abstractmethod
     def get_prob(self, s, a):
         pass
 
 
-class MCAgent(Agent):
+class MCAgent(TabularAgent):
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.config(['q', 'pi', 'b'])
@@ -328,7 +355,7 @@ class MCAgent(Agent):
         pass
 
 
-class TDAgent(Agent):
+class TDAgent(TabularAgent):
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.config(['q', 'pi', 'b'])
@@ -401,15 +428,15 @@ class TDAgent(Agent):
         if save_time:
             self.config_meta({'time': str(datetime.datetime.now())})
 
-    def init_ep(self, explore_starts=False):
+    def init_episode(self, eps=0, explore_starts=False):
         s = self.state_to_index(random.choice(self.starts))
         if explore_starts:
             s = random.randint(0, self.size - 1)
-        a = self.get_action(s)
+        a = self.get_action(s, eps)
         return s, a
 
     def sarsa_ep(self, algo, n, gamma, alpha, eps, explore_starts):
-        s, a = self.init_ep(explore_starts)
+        s, a = self.init_episode(explore_starts=explore_starts)
         cache = [(0, 0, 0) for _ in range(n + 1)]   # (state, action, reward)
         T = np.inf
         t = 0
@@ -417,7 +444,7 @@ class TDAgent(Agent):
             if t < T:
                 # get state, reward at step t+1
                 new_s, reward = self.next_state(s, a)
-                # check if terminal state
+                # check if self.terminal state
                 if new_s >= self.size:
                     T = t + 1
                 # get action at step t+1
@@ -489,7 +516,7 @@ class TDAgent(Agent):
         return rho
 
     def qlearn_ep(self, gamma, alpha, eps, explore_starts):
-        s, a = self.init_ep(explore_starts)
+        s, a = self.init_episode(explore_starts=explore_starts)
         visited = set()
         while s < self.size:
             visited.add(s)
@@ -502,7 +529,7 @@ class TDAgent(Agent):
         self.update_b(eps, visited)
 
     def double_qlearn_ep(self, gamma, alpha, eps, explore_starts):
-        s, a = self.init_ep(explore_starts)
+        s, a = self.init_episode(explore_starts=explore_starts)
         visited = set()
         while s < self.size:
             visited.add(s)
@@ -528,12 +555,8 @@ class TDAgent(Agent):
     def display(self, display_type):
         pass
 
-    @abstractmethod
-    def next_state(self):
-        pass
 
-
-class Dyna(Agent):
+class Dyna(TabularAgent):
     def __init__(self, *args, **kwargs):
         super().__init__()
         # Base variables
@@ -597,6 +620,8 @@ class Dyna(Agent):
             self.b[s][self.pi[s]] = 1 - self.eps + self.eps / len(self.actions[s])
     
     def get_action(self, s, eps=None):
+        if s == self.terminal:
+            return self.terminal_action
         if eps is None:
             if self.eps is not None:
                 eps = self.eps
@@ -606,11 +631,11 @@ class Dyna(Agent):
             return self.pi[s]
         return np.random.choice(len(self.actions[s]), p=self.b[s])
 
-    def init_ep(self):
+    def init_episode(self, eps=0):
         s = self.state_to_index(random.choice(self.starts))
         if self.explore_starts:
             s = random.randint(0, self.size - 1)
-        a = self.get_action(s)
+        a = self.get_action(s, eps)
         if self.algo == 'q+':
             self.last_visit = [[0 for _ in self.actions[s]] for s in range(self.size + 1)]
         return s, a
@@ -658,8 +683,8 @@ class Dyna(Agent):
     
     def qlearn_ep(self):
         t = 0
-        s, a = self.init_ep()
-        while s < self.size:
+        s, a = self.init_episode()
+        while s != self.terminal:
             new_s, new_a, reward = self.qlearn_step(s, a, t)
             self.update_model(s, a, new_s, reward)
             self.sim_exp()
@@ -715,6 +740,8 @@ class Dyna(Agent):
                 self.pi[s] = int(np.argmax(self.q[s]))
     
     def _single_q_update(self, s, a, new_s, reward):
+        if s == self.terminal or new_s == self.terminal:
+            return self.terminal_reward
         _update = reward + self.gamma * max(self.q[new_s]) - self.q[s][a]
         self.q[s][a] += self.alpha * _update
         return _update
@@ -723,10 +750,6 @@ class Dyna(Agent):
         threshold = self.theta if (s, a) not in self.priors else max(self.theta, self.priors[(s, a)])
         if prior >= threshold:
             heapq.heappush(self.pq, (-prior, s, a))
-
-    @abstractmethod
-    def next_state(self, s, a):
-        pass
 
 
 class Approximator(Agent):
@@ -803,7 +826,7 @@ class Approximator(Agent):
         s = [np.random.uniform(bound[0], bound[1]) for bound in self.start_bounds]
         return s
 
-    def init_ep(self, eps=None):
+    def init_episode(self, eps=0):
         s = self.init_state()
         a = self.get_action(s, eps)
         return s, a
@@ -846,8 +869,9 @@ class Approximator(Agent):
         self.num_per_dim = num_per_dim
         self.offsets = offsets
         self.mod_list = mod_list
-        
         self.init_train(save_params)
+
+        start_time = time.time()
         if algo == 'td':
             self.td()
         elif algo == 'lstd':
@@ -857,12 +881,14 @@ class Approximator(Agent):
                 self.sarsa(batch_size)
             else:
                 self.sarsa_cont()
+        end_time = time.time()
         if save_time:
+            self.config_meta({'duration': str(end_time - start_time)})
             self.config_meta({'time': str(datetime.datetime.now())})
     
     def get_action(self, s, eps=None):
-        if s == TERMINAL:
-            return TERMINAL_ACTION
+        if s == self.terminal:
+            return self.terminal_action
         if eps is None:
             eps = self.eps
         if np.random.random() < eps:
@@ -885,9 +911,9 @@ class Approximator(Agent):
         graph(steps_list, 'Num steps', 'Episode')
     
     def sarsa_ep(self):
-        s, a = self.init_ep()
+        s, a = self.init_episode()
         steps = 0
-        while s != TERMINAL:
+        while s != self.terminal:
             new_s, reward = self.next_state(s, a)
             new_a = self.get_action(new_s)
 
@@ -903,7 +929,7 @@ class Approximator(Agent):
         return steps
     
     def sarsa_cont(self):
-        s, a = self.init_ep()
+        s, a = self.init_episode()
         avg_reward = 0
         step = 0
         while step < self.num_steps:
@@ -925,8 +951,8 @@ class Approximator(Agent):
             ep += 1
 
     def td_ep(self):
-        s, a = self.init_ep()
-        while s != TERMINAL:
+        s, a = self.init_episode()
+        while s != self.terminal:
             a = self.pi[s]
             new_s, reward = self.next_state(s, a)
             self.w += self.alpha * (reward + self.gamma * self.v(new_s) - self.v(s)) * self.v_prime(s)
@@ -940,9 +966,9 @@ class Approximator(Agent):
             ep += 1
 
     def lstd_ep(self, a_inv, b):
-        s, a = self.init_ep()
+        s, a = self.init_episode()
         x = self.x[s]
-        while s != TERMINAL:
+        while s != self.terminal:
             a = self.pi[s]
             new_s, reward = self.next_state(s, a)
             new_x = self.x[new_s]
@@ -954,7 +980,7 @@ class Approximator(Agent):
         return a_inv, b
 
     def v(self, s: list):
-        if s == TERMINAL:
+        if s == self.terminal:
             return 0
         res = 0
         tiles = self.converter.encode(s)
@@ -963,7 +989,7 @@ class Approximator(Agent):
         return res
 
     def v_prime(self, s: list):
-        if s == TERMINAL:
+        if s == self.terminal:
             return np.zeros(self.d)
         x = np.zeros(self.d)
         tiles = self.converter.encode(s)
@@ -972,28 +998,16 @@ class Approximator(Agent):
         return x
     
     def q(self, s: list, a: int):
-        if s == TERMINAL:
+        if s == self.terminal:
             return 0
         new_s, reward = self.next_state(s, a)
         return reward + self.v(new_s)
 
     def q_prime(self, s: list, a: int):
-        if s == TERMINAL:
+        if s == self.terminal:
             return np.zeros(self.d)
         new_s, _ = self.next_state(s, a)
         return self.v_prime(new_s)
-
-    def test(self, num=1, max_step=None):
-        tmp = []
-        for _ in range(num):
-            steps = 0
-            s, a = self.init_ep(eps=0)
-            while s != TERMINAL and (max_step is None or steps < max_step):
-                a = self.get_action(s, eps=0)
-                s, _ = self.next_state(s, a)
-                steps += 1
-            tmp.append(steps)
-        return np.average(tmp)
 
     def save_convert(self):
         super().save_convert()
@@ -1005,10 +1019,6 @@ class Approximator(Agent):
         self.w = np.array(self.w)
         self.z = np.array(self.z)
         self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, self.offsets)
-
-    @abstractmethod
-    def next_state(self, s, a):
-        pass
 
 
 def random_argmax(arr):
