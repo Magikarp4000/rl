@@ -742,10 +742,13 @@ class Approximator(Agent):
         self.start_bounds = start_bounds
 
         # Model data
-        self.config(['dim', 'd', 'w'])
+        self.config(['dim', 'd', 'w', 'z'])
         self.dim = dim
         self.d = None
         self.w = []
+
+        # Eligibility trace
+        self.z = []
 
         # Training parameters
         self.algo = None
@@ -756,13 +759,16 @@ class Approximator(Agent):
         self.beta = None
         self.eps = 0
         self.a_eps = None
+        self.lamd = None
         self.explore_starts = False
 
         # Tile coding
-        self.config(['num_layers', 'num_per_dim', 'offsets'])
+        self.config(['num_layers', 'num_per_dim', 'offsets', 'mod_list'])
         self.num_layers = None
         self.num_per_dim = None
         self.offsets = None
+        self.mod_list = None
+        
         self.converter = None
 
     def init_train(self, save_params):
@@ -777,15 +783,21 @@ class Approximator(Agent):
                 'beta': self.beta,
                 'eps': self.eps,
                 'a_eps': self.a_eps,
+                'lambda': self.lamd,
                 'explore_starts': self.explore_starts,
             })
         
         # Tile coding
-        self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, self.offsets)
+        self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, 
+                                    self.offsets, self.mod_list)
         
         # Initialise model data
         self.d = self.converter.total * self.num_layers
         self.w = np.zeros(self.d)
+
+        # Eligibility trace
+        if self.lamd is not None:
+            self.z = np.zeros(self.d)
 
     def init_state(self):
         s = [np.random.uniform(bound[0], bound[1]) for bound in self.start_bounds]
@@ -805,10 +817,12 @@ class Approximator(Agent):
         beta=0.1,
         eps=0.1,
         a_eps=0.1,
+        lamd=None,
         explore_starts=False,
         num_layers=8,
         num_per_dim=[],
         offsets=[],
+        mod_list=[],
         batch_size=1,
         save_params=True,
         save_time=True,
@@ -826,10 +840,12 @@ class Approximator(Agent):
         self.beta = beta
         self.eps = eps
         self.a_eps = a_eps
+        self.lamd = lamd
         self.explore_starts = explore_starts
         self.num_layers = num_layers
         self.num_per_dim = num_per_dim
         self.offsets = offsets
+        self.mod_list = mod_list
         
         self.init_train(save_params)
         if algo == 'td':
@@ -874,7 +890,14 @@ class Approximator(Agent):
         while s != TERMINAL:
             new_s, reward = self.next_state(s, a)
             new_a = self.get_action(new_s)
-            self.w += self.alpha * (reward + self.q(new_s, new_a) - self.q(s, a)) * self.q_prime(s, a)
+
+            gradient = self.q_prime(s, a)
+            if self.lamd is not None:
+                self.z = self.gamma * self.lamd * self.z + self.q_prime(s, a)
+                gradient = self.z
+            
+            self.w += self.alpha * (reward + self.q(new_s, new_a) - self.q(s, a)) * gradient
+
             s, a = new_s, new_a
             steps += 1
         return steps
@@ -975,10 +998,12 @@ class Approximator(Agent):
     def save_convert(self):
         super().save_convert()
         self.w = self.w.tolist()
+        self.z = self.z.tolist()
     
     def load_convert(self):
         super().load_convert()
         self.w = np.array(self.w)
+        self.z = np.array(self.z)
         self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, self.offsets)
 
     @abstractmethod

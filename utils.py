@@ -1,5 +1,5 @@
+import os
 import numpy as np
-import pygame
 
 
 BLACK = (0, 0, 0)
@@ -66,3 +66,6 @@ def force_round(x, num_round):
         x_str += '.'
     x_str += '0' * max(0, num_round - length)
     return x_str
+
+def get_dir_path(file):
+    return os.path.dirname(os.path.realpath(file))

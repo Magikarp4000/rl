@@ -121,9 +121,10 @@ class Car(Approximator):
 
 car = Car(bounds=[(-1.2, 0.5), (-0.07, 0.07)], start_bounds=[(-0.6, -0.4), (0, 0)])
 car.load('mountain/v1.0')
-# car.train('sarsa', num_ep=100, gamma=1.0, alpha=0.4, eps=0.1, num_layers=8, tile_frac=8, batch_size=10)
+car.train('sarsa', num_ep=100, gamma=1.0, alpha=0.4, eps=0.1, lamd=0.85, num_layers=8, num_per_dim=[8, 8], 
+          offsets=[1, 3], batch_size=10)
 # car.save('mountain/v2.1')
-# print(car.test(100))
+print(car.test(100))
 car.simulate()
 # car.play()
 # car.train('sarsa', 0, num_tiles=8, tile_frac=8)

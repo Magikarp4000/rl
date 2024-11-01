@@ -9,4 +9,5 @@ class Approxtrack(Racetrack, Approximator):
 
 track, start, finish = get_track()
 pro = Approxtrack(track, start, finish, 3)
-pro.train('sarsa', 10, num_tiles=4, tile_frac=4, alpha=0.4)
+pro.train('sarsa', 10, alpha=0.4, num_layers=4, num_per_dim=4, 
+          offsets=[1,3,5,7,9], mod_list=[False,True,False,False,False])

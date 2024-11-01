@@ -8,6 +8,8 @@ import pygame
 from pygame.locals import *
 
 
+DIR_PATH = get_dir_path(__file__)
+
 pygame.init()
 info = pygame.display.Info()
 
@@ -36,27 +38,28 @@ KEY_MAP = {
         K_RIGHT: -ANG_ACCEL
     },
     'speed': {
-        K_UP: ACCEL
+        K_UP: ACCEL,
+        K_DOWN: -ACCEL * 0.85
     }
 }
 
 
 class ProCar():
-    def __init__(self, x=None, y=None, spe=0, angle=0, ang_spe=0, max_spe=7.5, max_ang_spe=5, 
+    def __init__(self, x=None, y=None, spe=0, angle=0, ang_spe=0, min_spe=-2.5, max_spe=7.5, max_ang_spe=5, 
                  friction=0.7, ang_friction=0.7):
         self.x = WIDTH / 2 if x is None else x
         self.y = HEIGHT / 2 if y is None else y
         self.spe = spe
         self.angle = angle
         self.ang_spe = ang_spe
-        self.min_spe = 0
+        self.min_spe = min_spe
         self.max_spe = max_spe
         self.min_ang_spe = -max_ang_spe
         self.max_ang_spe = max_ang_spe
         self.friction = friction
         self.ang_friction = ang_friction
 
-        self.image = pygame.image.load("racetrack/assets/car.png").convert_alpha()
+        self.image = pygame.image.load(f"{DIR_PATH}/racetrack/assets/car.png").convert_alpha()
         self.image = pygame.transform.flip(self.image, False, True)
         self.image = pygame.transform.scale(self.image, (CAR_WIDTH, CAR_HEIGHT))
         self.clean_image = self.image.copy()
@@ -97,7 +100,10 @@ class ProCar():
     def update_pos(self, action):
         accel, ang_accel = action
 
-        self.spe += accel - self.friction * ACCEL
+        self.spe += accel
+        raw_spe = abs(self.spe)
+        raw_spe = np.clip(raw_spe - self.friction * ACCEL, 0, None)
+        self.spe = raw_spe if self.spe >= 0 else -raw_spe
         self.spe = np.clip(self.spe, self.min_spe, self.max_spe)
         
         self.ang_spe += ang_accel
@@ -182,7 +188,7 @@ class Game:
         clock = pygame.time.Clock()
 
         model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
-                              [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
+                              [[0, WIDTH], [0, HEIGHT], [-2.5, 7.5], [0, 360], [-5, 5]],
                               [[0, 0], [0, HEIGHT], [0, 0], [0, 360], [0, 0]])
         if load_file is not None:
             model.load(load_file)
@@ -294,7 +300,12 @@ class ProtrackModel(Approximator):
         x, y, spe, angle, ang_spe = state
         accel, ang_accel = action
 
-        spe += accel - self.friction * ACCEL
+        spe += accel
+        raw_spe = abs(spe)
+        raw_spe = np.clip(raw_spe - self.friction * ACCEL, 0, None)
+        spe = raw_spe if spe >= 0 else -raw_spe
+
+        # spe += accel - self.friction * ACCEL
         spe = np.clip(spe, self.bounds[2][0], self.bounds[2][1])
         
         ang_spe += ang_accel
@@ -325,11 +336,12 @@ class ProtrackModel(Approximator):
         self.action_map = self.get_action_map()
 
 
-# model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
-#                       [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
-#                       [[0, 0], [HEIGHT / 2, HEIGHT / 2], [0, 0], [90, 90], [0, 0]])
-# model.train('sarsa', 500, num_layers=8, num_per_dim=[8] * 5, offsets=[1, 3, 5, 7, 9])
-# model.save('protrack/vB1.0')
+model = ProtrackModel(ACCEL, ANG_ACCEL, FRICTION, ANG_FRICTION,
+                      [[0, WIDTH], [0, HEIGHT], [0, 7.5], [0, 360], [-5, 5]],
+                      [[0, 0], [HEIGHT / 2, HEIGHT / 2], [0, 0], [90, 90], [0, 0]])
+model.load('protrack/v2.0')
+# model.train('sarsa', 100, num_layers=8, num_per_dim=[8] * 5, offsets=[1, 3, 5, 7, 9], alpha=0.1, lamd=0.9)
+# model.save('protrack/v2.1')
 
 game = Game(WIDTH, HEIGHT, BG_COLOUR)
-game.main(mode='user', load_file='protrack/vB1.0', fps=60, eps=0)
+game.main(mode='user', fps=500, eps=0, load_file='protrack/v2.0')

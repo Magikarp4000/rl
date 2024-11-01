@@ -2,7 +2,7 @@ import numpy as np
 
 
 class TileCoding:
-    def __init__(self, n: int, dim: int, bounds: list, num_per_dim: list, offsets: list):
+    def __init__(self, n: int, dim: int, bounds: list, num_per_dim: list, offsets: list, mod_list=[]):
         assert(len(bounds) == dim)
         assert(len(num_per_dim) == dim)
         assert(len(offsets) == dim)
@@ -17,6 +17,7 @@ class TileCoding:
         self.bounds = bounds
         self.num_per_dim = num_per_dim
         self.offsets = offsets
+        self.mod_list = mod_list
         self.total = int(np.prod(np.array(self.num_per_dim) + 1))
 
     def encode(self, state: list):
@@ -36,6 +37,8 @@ class TileCoding:
                 offset = (i * self.offsets[j] * (size / self.n)) % size
                 cur_raw = (state[j] + offset - cur_bounds[0]) / size
                 cur = int(np.floor(cur_raw))
+                if self.mod_list and self.mod_list[j]:
+                    cur %= self.n + 1
 
                 encoding += cur * multiplier
                 multiplier *= self.num_per_dim[j] + 1
