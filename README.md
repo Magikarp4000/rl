@@ -1,4 +1,4 @@
-**Basic reinforcement learning package**
+## Basic reinforcement learning package
 
 **Algorithms:**
 
