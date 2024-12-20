@@ -1,12 +1,14 @@
 import random, time, datetime, heapq
 from abc import ABC, abstractmethod
 import json
+import inspect
 
 import numpy as np
 from matplotlib import pyplot as pl
 
 import data_transfer
 from tilecoding import TileCoding
+from network import Network
 
 
 class Agent(ABC):
@@ -28,6 +30,21 @@ class Agent(ABC):
     def config_meta(self, data):
         for val in data:
             self._metadata.update({val: data[val]})
+    
+    def train(self, algo, *args, save_params=True, save_time=True, **kwargs):
+        if algo not in self.algos:
+            print("Invalid algorithm mate!")
+            self.print_algos()
+        else:
+            self.init_train(save_params, *args, **kwargs)
+            start_time = time.time()
+
+            self.core_train(algo, *args, **kwargs)
+
+            end_time = time.time()
+            if save_time:
+                self.config_meta({'duration': str(end_time - start_time)})
+                self.config_meta({'time': str(datetime.datetime.now())})
 
     def load(self, file_name, load_actions=False):
         to_load = data_transfer.load(file_name)
@@ -756,6 +773,243 @@ class Approximator(Agent):
     def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0, *args, **kwargs):
         super().__init__()
         # Base variables
+        self.algos = []
+
+        # Environment & agent data
+        self.config(['base_actions', 'bounds', 'start_bounds'])
+        self.base_actions = base_actions
+        self.bounds = bounds
+        self.start_bounds = start_bounds
+
+        # Model data
+        self.config(['dim', 'd', 'w', 'z', 'approx'])
+        self.dim = dim
+        self.d = None
+        self.w = []
+
+        # Training parameters
+        self.algo = None
+        self.num_ep = None
+        self.num_steps = None
+        self.gamma = None
+        self.alpha = None
+        self.beta = None
+        self.eps = 0
+        self.a_eps = None
+        self.lamd = None
+        self.explore_starts = False
+    
+    def set_algos(self, algos: list):
+        self.algos = algos
+    
+    def print_algos(self):
+        print("List of valid algorithms:")
+        for x in self.algos:
+            print(f'- {x}')
+    
+    def train(self, algo, *args, save_params=True, save_time=True, **kwargs):
+        return super().train(algo, *args, save_params=save_params, save_time=save_time, **kwargs)
+
+    def train(self, 
+        algo,
+        **kwargs,
+    ):
+        if algo not in self.algos:
+            print("Invalid algorithm mate!")
+            self.print_algos()
+        else:
+            self.algo = algo
+            self.num_ep = num_ep
+            self.num_steps = num_steps
+            self.gamma = gamma
+            self.alpha = alpha
+            self.beta = beta
+            self.eps = eps
+            self.a_eps = a_eps
+            self.lamd = lamd
+            self.explore_starts = explore_starts
+
+            self.init_train(algo, save_params=save_params, **kwargs)
+            start_time = time.time()
+
+            self.core_train(algo, **kwargs)
+
+            end_time = time.time()
+            if save_time:
+                self.config_meta({'duration': str(end_time - start_time)})
+                self.config_meta({'time': str(datetime.datetime.now())})
+    
+    @abstractmethod
+    def core_train(self, algo, **kwargs):
+        pass
+
+    @abstractmethod
+    def init_train(self, save_params, *args, **kwargs):
+        # Save parameters
+        if save_params:
+            self.config_meta({
+                'algo': self.algo,
+                'num_ep': self.num_ep,
+                'num_steps': self.num_steps,
+                'gamma': self.gamma,
+                'alpha': self.alpha,
+                'beta': self.beta,
+                'eps': self.eps,
+                'a_eps': self.a_eps,
+                'lambda': self.lamd,
+                'explore_starts': self.explore_starts,
+                'capacity': self.capacity,
+                'sample_size': self.sample_size
+            })
+
+
+class Default(Agent):
+    def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0):
+        super().__init__()
+        self.base_actions = base_actions
+        self.bounds = bounds
+        self.start_bounds = start_bounds
+        self.dim = dim
+
+    def _save_params(self, n, *args, **kwargs):
+        try:
+            core_args = inspect.getargs(self.core)[6:]
+            self.config_meta({'n': n})
+            self.config_meta({name: val for name, val in zip(core_args, args)})
+            self.config_meta(kwargs)
+        except IndexError:
+            pass
+    
+    def train(self, n, batch_size=1, save_params=True, save_time=True, *args, **kwargs):
+        if save_params:
+            self._save_params(n, *args, **kwargs)
+        
+        self.init_train(*args, **kwargs)
+
+        start_time = time.time()
+        self._train(n, batch_size, *args, **kwargs)
+        end_time = time.time()
+
+        if save_time:
+            self.config_meta({'duration': str(end_time - start_time)})
+            self.config_meta({'time': str(datetime.datetime.now())})
+    
+    def _train(self, n, batch_size, *args, **kwargs):
+        ep = 0
+        steps_list = []
+        self.cache_idx = 0
+        while ep < n:
+            start_time = time.time()
+            for _ in range(batch_size):
+                steps = self._train_episode(*args, **kwargs)
+                steps_list.append(steps)
+                ep += 1
+            end_time = time.time()
+            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+        graph(steps_list, 'Num steps', 'Episode')
+    
+    def _init_state_action(self):
+        s = self.init_state()
+        a = self.get_action(s)
+        return s, a
+
+    def _train_episode(self, *args, **kwargs):
+        s, a = self._init_state_action()
+        steps = 0
+        while s != self.terminal:
+            new_s, r = self.next_state(s, a)
+            new_a = self.get_action(new_s)
+            self.core(s, a, r, new_s, new_a, *args, **kwargs)
+            self.approximate(s, a, r, new_s, new_a, *args, **kwargs)
+            s, a = new_s, new_a
+            steps += 1
+        return steps
+    
+    def v(self, s):
+        pass
+
+    def v_prime(self, s):
+        pass
+
+    def q(self, s, a):
+        pass
+
+    def q_prime(self, s, a):
+        pass
+
+    @abstractmethod
+    def core(self, s, a, r, new_s, new_a, *args, **kwargs):
+        pass
+
+    def approximate(self, s, a, r, new_s, new_a, *args, **kwargs):
+        pass
+
+
+class Tabular:
+    def __init__(self):
+        self._v = []
+        self._q = []
+
+    def v(self, s):
+        return self._v[s]
+
+    def q(self, s, a):
+        return self._q[s][a]
+
+class Sarsa(Default):
+    def core(self, s, a, r, new_s, new_a, gamma, alpha, lamd):
+        gradient = self.q_prime(s, a)
+        if lamd is not None:
+            self.z = gamma * lamd * self.z + self.q_prime(s, a)
+            gradient = self.z
+        
+        self.w += alpha * (r + self.q(new_s, new_a) - self.q(s, a)) * gradient
+
+
+class NN(Default):
+    def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0):
+        super().__init__(base_actions, bounds, start_bounds, dim)
+        self.cache = []
+        self.cache_idx = None
+        self.capacity = None
+        self.sample_size = None
+        self.net_params = None
+        self.network = None
+
+    def get_data(self):
+        """
+        self.cache: (s, a, r, s', a')
+        """
+        minibatch = random.sample(self.cache, self.sample_size)
+        X = [t[:2] for t in minibatch]
+        y = [t[2] + self.gamma * self.q(t[3], t[4]) for t in minibatch]
+        return list(zip(X, y))
+    
+    def approximate(self, s, a, r, new_s, new_a, *args, **kwargs):
+        # Update memory for network
+        self.cache_idx = (self.cache_idx + 1) % self.capacity
+        self.cache[self.cache_idx] = (s, a, r, new_s, new_a)
+        
+        # Train network
+        data = self.get_data()
+        self.network.train(data, epochs=1, mini_batch_size=1, eta=0.1)
+
+
+class DQ(Default):
+    def approximate(self, s, a, r, new_s, new_a, *args, **kwargs):
+        # Update memory for network
+        self.cache_idx = (self.cache_idx + 1) % self.capacity
+        self.cache[self.cache_idx] = (s, a, r, new_s, new_a)
+        
+        # Train network
+        data = self.network_data_loader()
+        self.network.train(data, epochs=1, mini_batch_size=1, eta=0.1)
+
+
+class Approximator2(Agent):
+    def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0, *args, **kwargs):
+        super().__init__()
+        # Base variables
         self.algos = ['td', 'qlearn', 'sarsa']
 
         # Environment & agent data
@@ -765,10 +1019,13 @@ class Approximator(Agent):
         self.start_bounds = start_bounds
 
         # Model data
-        self.config(['dim', 'd', 'w', 'z'])
+        self.config(['dim', 'd', 'w', 'z', 'approx'])
         self.dim = dim
         self.d = None
         self.w = []
+
+        # Approximator type
+        self.approx = None
 
         # Eligibility trace
         self.z = []
@@ -791,28 +1048,17 @@ class Approximator(Agent):
         self.num_per_dim = None
         self.offsets = None
         self.mod_list = None
-        
         self.converter = None
 
     def init_train(self, save_params):
-        # Save parameters
-        if save_params:
-            self.config_meta({
-                'algo': self.algo,
-                'num_ep': self.num_ep,
-                'num_steps': self.num_steps,
-                'gamma': self.gamma,
-                'alpha': self.alpha,
-                'beta': self.beta,
-                'eps': self.eps,
-                'a_eps': self.a_eps,
-                'lambda': self.lamd,
-                'explore_starts': self.explore_starts,
-            })
+        
         
         # Tile coding
         self.converter = TileCoding(self.num_layers, self.dim, self.bounds, self.num_per_dim, 
                                     self.offsets, self.mod_list)
+        # Neural network
+        if self.approx == 'network':
+            self.network = Network(self.net_params, cost_type='mse')
         
         # Initialise model data
         self.d = self.converter.total * self.num_layers
@@ -833,6 +1079,7 @@ class Approximator(Agent):
 
     def train(self,
         algo,
+        approx='tile',
         num_ep=1,
         num_steps=None,
         gamma=1.0,
@@ -842,6 +1089,9 @@ class Approximator(Agent):
         a_eps=0.1,
         lamd=None,
         explore_starts=False,
+        capacity=0,
+        sample_size=0,
+        net_params=[],
         num_layers=8,
         num_per_dim=[],
         offsets=[],
@@ -856,6 +1106,7 @@ class Approximator(Agent):
                 print(f'- {x}')
             return
         self.algo = algo
+        self.approx = approx
         self.num_ep = num_ep
         self.num_steps = num_steps
         self.gamma = gamma
@@ -869,6 +1120,9 @@ class Approximator(Agent):
         self.num_per_dim = num_per_dim
         self.offsets = offsets
         self.mod_list = mod_list
+        self.capacity = capacity
+        self.sample_size = sample_size
+        self.net_params = net_params
         self.init_train(save_params)
 
         start_time = time.time()
@@ -900,6 +1154,7 @@ class Approximator(Agent):
     def sarsa(self, batch_size):
         ep = 0
         steps_list = []
+        self.cache_idx = 0
         while ep < self.num_ep:
             start_time = time.time()
             for _ in range(batch_size):
@@ -909,8 +1164,18 @@ class Approximator(Agent):
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         graph(steps_list, 'Num steps', 'Episode')
-    
-    def sarsa_ep(self):
+
+    def episode(self, *args, **kwargs):
+        steps = 0
+        s, a = self.init_episode()
+        while s != self.terminal:
+            new_s, reward = self.next_state(s, a)
+            new_a = self.get_action(new_s)
+            self.core(args, kwargs)
+            self.approx(args, kwargs)
+            
+
+    def sarsa_ep(self, *args, **kwargs):
         s, a = self.init_episode()
         steps = 0
         while s != self.terminal:
@@ -923,6 +1188,14 @@ class Approximator(Agent):
                 gradient = self.z
             
             self.w += self.alpha * (reward + self.q(new_s, new_a) - self.q(s, a)) * gradient
+
+            # Update memory
+            self.cache_idx = (self.cache_idx + 1) % self.capacity
+            self.cache[self.cache_idx] = (s, a, reward, new_s, new_a)
+            
+            # Train network
+            data = self.network_data_loader()
+            self.network.train(data, epochs=1, mini_batch_size=1, eta=0.1)
 
             s, a = new_s, new_a
             steps += 1
@@ -983,20 +1256,32 @@ class Approximator(Agent):
         if s == self.terminal:
             return 0
         res = 0
-        tiles = self.converter.encode(s)
-        for tile in tiles:
+        weights = np.zeros(self.d)
+        
+        activated_tiles = self.converter.encode(s)
+        for tile in activated_tiles:
             res += self.w[tile]
-        return res
+            weights[tile] = 1
+        
+        if self.approx == 'tile':
+            return res
+        elif self.approx == 'network':
+            return self.network.feedforward(weights)
 
     def v_prime(self, s: list):
         if s == self.terminal:
             return np.zeros(self.d)
-        x = np.zeros(self.d)
-        tiles = self.converter.encode(s)
-        for tile in tiles:
-            x[tile] = 1
-        return x
-    
+        res = np.zeros(self.d)
+        
+        activated_tiles = self.converter.encode(s)
+        for tile in activated_tiles:
+            res[tile] = 1
+        
+        if self.approx == 'tile':    
+            return res
+        elif self.approx == 'network':
+            return self.network.feedforward(res)
+        
     def q(self, s: list, a: int):
         if s == self.terminal:
             return 0
