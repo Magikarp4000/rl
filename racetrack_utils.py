@@ -78,7 +78,7 @@ class Square:
         self.image.fill(SQUARE_COLOURS[_type])
 
 
-class Racetrack(agents.Agent):
+class Racetrack(agents.DeprecatedAgent):
     def __init__(self, track, start, finish, max_spe, remove_invalid_flag=True):
         super().__init__()
         self.config(['track', 'start', 'finish', 'max_spe'])
@@ -368,3 +368,4 @@ def create_generic_track(w, h):
         for x in range(10, 18):
             track.append((x, y))
     return track, start, finish
+
