@@ -11,7 +11,38 @@ from tilecoding import TileCoding
 from network import Network
 
 
-class Environment:
+class Env:
+    @abstractmethod
+    def next_state(self, s, a, *args, **kwargs): pass
+    
+    @abstractmethod
+    def rand_state(self): pass
+    
+    @abstractmethod
+    def rand_start_state(self): pass
+    
+    @abstractmethod
+    def rand_action(self, s): pass
+
+
+class DiscreteEnv(Env):
+    def __init__(self, states=[], actions=[], start_states=[]):
+        self.states = states
+        self.actions = actions
+        self.start_states = start_states  # state indices
+        self.size = len(states)
+    
+    def rand_state(self):
+        return random.randint(0, self.size)
+    
+    def rand_start_state(self):
+        return random.choice(self.start_states)
+    
+    def rand_action(self, s):
+        return random.randint(0, len(self.actions[s]))
+
+
+class ContinuousEnv(Env):
     def __init__(self, base_actions=[], bounds=[], start_bounds=[]):
         self.base_actions = base_actions
         self.bounds = bounds
@@ -24,10 +55,7 @@ class Environment:
         return [random.uniform(*bound) for bound in self.start_bounds]
 
     def rand_action(self, s):
-        return random.randint(0, len(self.base_actions[s]))
-
-    @abstractmethod
-    def next_state(self, s, a, *args, **kwargs): pass
+        return random.randint(0, len(self.base_actions))
 
 
 class Approximator:
@@ -43,7 +71,7 @@ class Approximator:
         return self._data
 
     @abstractmethod
-    def update(self, s, a, r, new_s, new_a, *args, **kwargs): pass
+    def update(self, s, a, r, new_s, new_a, diff): pass
     def v(self, s): pass
     def v_prime(self, s): pass
     def q(self, s, a): pass
@@ -51,7 +79,7 @@ class Approximator:
 
 
 class Agent:
-    def __init__(self, approx: Approximator, env: Environment):
+    def __init__(self, approx: Approximator, env: Env):
         super().__init__()
         self.approx = approx
         self.env = env
@@ -62,9 +90,71 @@ class Agent:
 
         self._metadata = {}
     
-    def config_meta(self, data):
+    def _config_meta(self, data):
         for val in data:
             self._metadata.update({val: data[val]})
+
+    def _save_params(self, *args, **kwargs):
+        try:
+            train_args = inspect.getargs(self.train)[1: 4]
+            core_args = inspect.getargs(self.core)[6:]
+            self._config_meta({name: val for name, val in zip(train_args, args)})
+            self._config_meta({name: val for name, val in zip(core_args, args)})
+            self._config_meta(kwargs)
+        except IndexError:
+            pass
+    
+    def _train(self, n, eps, expstart, batch_size, *args, **kwargs):
+        ep = 0
+        steps_list = []
+        self.cache_idx = 0
+        while ep < n:
+            start_time = time.time()
+            for _ in range(batch_size):
+                steps = self._train_episode(eps, expstart, *args, **kwargs)
+                steps_list.append(steps)
+                ep += 1
+            end_time = time.time()
+            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+        graph(steps_list, 'Num steps', 'Episode')
+
+    def _train_episode(self, eps, expstart, *args, **kwargs):
+        s, a = self._init_state_action(expstart)
+        steps = 0
+        while s != self.terminal:
+            new_s, r = self.env.next_state(s, a)
+            new_a = self._get_action(new_s, eps=eps)
+            diff = self.core(s, a, r, new_s, new_a, *args, **kwargs)
+            self.approx.update(s, a, r, new_s, new_a, diff)
+            s, a = new_s, new_a
+            steps += 1
+        return steps
+    
+    def _init_state(self, expstart):
+        if expstart:
+            return self.env.rand_state()
+        else:
+            return self.env.rand_start_state()
+
+    def _init_state_action(self):
+        s = self._init_state()
+        a = self._get_action(s)
+        return s, a
+
+    def _get_action(self, s, eps=0):
+        if random.random() < eps:
+            return self.env.rand_action(s)
+        else:
+            return np.argmax([self.approx.q(s, a) for a in range(len(self.env.base_actions[s]))])
+    
+    def _single_test(self, max_step, eps):
+        steps = 0
+        s, a = self._init_state_action()
+        while s != self.terminal and (max_step is None or steps < max_step):
+            a = self._get_action(s, eps=eps)
+            s, _ = self.env.next_state(s, a)
+            steps += 1
+        return steps
 
     def load(self, file_name, load_actions=False):
         to_load = data_transfer.load(file_name)
@@ -109,68 +199,6 @@ class Agent:
     def test(self, num_steps=1, max_step=None, eps=0):
         return np.mean([self._single_test(max_step, eps)] * num_steps)
 
-    def _save_params(self, *args, **kwargs):
-        try:
-            train_args = inspect.getargs(self.train)[1: 4]
-            core_args = inspect.getargs(self.core)[6:]
-            self.config_meta({name: val for name, val in zip(train_args, args)})
-            self.config_meta({name: val for name, val in zip(core_args, args)})
-            self.config_meta(kwargs)
-        except IndexError:
-            pass
-    
-    def _train(self, n, eps, expstart, batch_size, *args, **kwargs):
-        ep = 0
-        steps_list = []
-        self.cache_idx = 0
-        while ep < n:
-            start_time = time.time()
-            for _ in range(batch_size):
-                steps = self._train_episode(eps, expstart, *args, **kwargs)
-                steps_list.append(steps)
-                ep += 1
-            end_time = time.time()
-            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
-        graph(steps_list, 'Num steps', 'Episode')
-
-    def _train_episode(self, eps, expstart, *args, **kwargs):
-        s, a = self._init_state_action(expstart)
-        steps = 0
-        while s != self.terminal:
-            new_s, r = self.env.next_state(s, a)
-            new_a = self._get_action(new_s, eps=eps)
-            self.core(s, a, r, new_s, new_a, *args, **kwargs)
-            self.approx.update(s, a, r, new_s, new_a, *args, **kwargs)
-            s, a = new_s, new_a
-            steps += 1
-        return steps
-    
-    def _init_state(self, expstart):
-        if expstart:
-            return self.env.rand_state()
-        else:
-            return self.env.rand_start_state()
-
-    def _init_state_action(self):
-        s = self._init_state()
-        a = self._get_action(s)
-        return s, a
-
-    def _get_action(self, s, eps=0):
-        if random.random() < eps:
-            return self.env.rand_action(s)
-        else:
-            return np.argmax([self.approx.q(s, a) for a in range(len(self.env.base_actions[s]))])
-    
-    def _single_test(self, max_step, eps):
-        steps = 0
-        s, a = self._init_state_action()
-        while s != self.terminal and (max_step is None or steps < max_step):
-            a = self._get_action(s, eps=eps)
-            s, _ = self.env.next_state(s, a)
-            steps += 1
-        return steps
-
     @abstractmethod
     def core(self, s, a, r, new_s, new_a, *args, **kwargs): pass
     def load_convert(self): pass
@@ -184,15 +212,15 @@ class Sarsa(Agent):
 
 ## ----------- BELOW NOT FINISHED -----------
 class Tabular(Approximator):
-    def __init__(self):
-        self._v = []
-        self._q = []
-
-    def v(self, s):
-        return self._v[s]
+    def __init__(self, env: DiscreteEnv):
+        super().__init__()
+        self._q = shape(env.actions, 0)
 
     def q(self, s, a):
         return self._q[s][a]
+    
+    def update(self, s, a, r, new_s, new_a, diff):
+        self._q[s][a] += diff
 
 
 class TileCode(Approximator):
@@ -236,3 +264,11 @@ def graph(y, xlabel=None, ylabel=None):
     pl.ylabel(ylabel)
     pl.plot(np.arange(len(y)), y)
     pl.show()
+
+def shape(val, arr):
+    if not isinstance(arr, list):
+        return val
+    res = []
+    for x in arr:
+        res.append(shape(val, x))
+    return res
