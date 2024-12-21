@@ -70,12 +70,12 @@ class Approximator:
     def get_data(self):
         return self._data
 
-    @abstractmethod
-    def update(self, s, a, r, new_s, new_a, diff): pass
     def v(self, s): pass
     def v_prime(self, s): pass
     def q(self, s, a): pass
     def q_prime(self, s, a): pass
+    @abstractmethod
+    def update(self, s, a, r, new_s, new_a, diff): pass
 
 
 class Agent:
@@ -215,6 +215,7 @@ class Tabular(Approximator):
     def __init__(self, env: DiscreteEnv):
         super().__init__()
         self._q = shape(env.actions, 0)
+        self.config(['_q'])
 
     def q(self, s, a):
         return self._q[s][a]
