@@ -55,6 +55,8 @@ class DiscreteEnv(Env):
         return random.randint(0, len(self.actions[s]) - 1)
     
     def action_spec(self, s):
+        if s == self.T:
+            return [0]
         return range(len(self.actions[s]))
 
 
