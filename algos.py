@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 import inspect
-import baseagent
+
+import numpy as np
+
+from baseagent import Agent, Command
 
 
 class Algo(ABC):
@@ -14,8 +17,7 @@ class Algo(ABC):
         return params
 
     @abstractmethod
-    def __call__(self, agent: baseagent.Agent, s, a, r, new_s, new_a, step, *args, **kwargs):
-        pass
+    def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal): pass
 
 
 class Sarsa(Algo):
@@ -32,8 +34,9 @@ class Sarsa(Algo):
         self.alpha = alpha
         self.gamma = gamma
 
-    def __call__(self, agent: baseagent.Agent, s, a, r, new_s, new_a, step):
-        return self.alpha * (r + self.gamma * agent.q(new_s, new_a) - agent.q(s, a))
+    def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal):
+        return Command(self.alpha * (r + self.gamma * agent.q(new_s, new_a) - agent.q(s, a)),
+                       s, a, is_terminal)
 
 
 class Qlearn(Algo):
@@ -50,19 +53,56 @@ class Qlearn(Algo):
         self.alpha = alpha
         self.gamma = gamma
     
-    def __call__(self, agent: baseagent.Agent , s, a, r, new_s, new_a, step):
+    def __call__(self, agent: Agent , s, a, r, new_s, new_a, t, is_terminal):
         best = max([agent.q(new_s, next_a) for next_a in agent.env.action_spec(new_s)])
-        return self.alpha * (r + self.gamma * best - agent.q(s, a))
+        return Command(self.alpha * (r + self.gamma * best - agent.q(s, a)),
+                       s, a, is_terminal)
+
+
+class Buffer:
+    def __init__(self, size, default=None):
+        self.size = size
+        self._buffer = [default for _ in range(size)]
+    
+    def get(self, idx):
+        return self._buffer[idx % self.size]
+    
+    def set(self, idx, val):
+        self._buffer[idx % self.size] = val
 
 
 class NStepSarsa(Algo):
-    def __init__(self, alpha=0.1, gamma=0.9, nstep=1):
+    def __init__(self, alpha=0.1, gamma=0.9, nstep=5):
         super().__init__('nstepsarsa')
         self.alpha = alpha
         self.gamma = gamma
         self.nstep = nstep
 
-        self.cache = [None for _ in range(nstep)]
+        default = (0, 0, 0, False)
+        self.buffer = Buffer(nstep + 1, default)
+        self.T_step = np.inf
 
-    def __call__(self, agent: baseagent.Agent, s, a, r, new_s, new_a, step):
-        pass
+    def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal):
+        if self.T_step is np.inf and is_terminal:
+            self.T_step = t
+
+        if not is_terminal:
+            self.buffer.set(t + 1, (new_s, new_a, r, is_terminal))
+        
+        prev = t - self.nstep + 1
+        if prev < 0:
+            return Command(no_update=True)
+        
+        ret = 0
+        cur_gamma = 1
+        for i in range(prev + 1, min(t + 1, self.T_step + 1)):
+            ret += cur_gamma * self.buffer.get(i)[2]
+            cur_gamma *= self.gamma
+        
+        end_s, end_a = self.buffer.get(t + 1)[:2]
+        ret += cur_gamma * agent.q(end_s, end_a)
+
+        prev_s, prev_a = self.buffer.get(prev)[:2]
+        terminate = t >= self.T_step + self.nstep
+        print(prev_s, prev_a, terminate)
+        return Command(ret, prev_s, prev_a, terminate)

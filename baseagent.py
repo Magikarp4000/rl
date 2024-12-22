@@ -10,6 +10,15 @@ import data_transfer
 import envs
 
 
+class Command:
+    def __init__(self, diff=None, tgt_s=None, tgt_a=None, terminate=False, no_update=False):
+        self.diff = diff
+        self.tgt_s = tgt_s
+        self.tgt_a = tgt_a
+        self.terminate = terminate
+        self.no_update = no_update
+
+
 class Agent(ABC):
     def __init__(self, env: envs.Env, config=[]):
         super().__init__()
@@ -32,7 +41,6 @@ class Agent(ABC):
             self._config_meta(kwargs)
         except IndexError:
             pass
-        print(self._metadata)
     
     def _train(self, n, eps, expstart, batch_size):
         ep = 0
@@ -50,14 +58,23 @@ class Agent(ABC):
 
     def _train_episode(self, eps, expstart):
         s, a = self._init_state_action(expstart)
+        cmd = Command()
         step = 0
-        while s != self.env.T:
-            new_s, r = self.env.next_state(s, a)
-            new_a = self._get_action(new_s, eps=eps)
-            diff = self.algo(self, s, a, r, new_s, new_a, step)
-            self.update(s, a, r, new_s, new_a, diff)
-            s, a = new_s, new_a
+
+        while not cmd.terminate:
+            is_terminal = s == self.env.T
+            if not is_terminal:
+                new_s, r = self.env.next_state(s, a)
+                new_a = self._get_action(new_s, eps=eps)
+
+            cmd = self.algo(self, s, a, r, new_s, new_a, step, is_terminal)
+            if not cmd.no_update and not cmd.terminate:
+                self.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
+
+            if not is_terminal:
+                s, a = new_s, new_a
             step += 1
+        
         return step
     
     def _init_state(self, expstart):
@@ -145,4 +162,4 @@ class Agent(ABC):
     def q(self, s, a): pass
     def q_prime(self, s, a): pass
     @abstractmethod
-    def update(self, s, a, r, new_s, new_a, diff): pass
+    def update(self, diff, tgt_s, tgt_a): pass

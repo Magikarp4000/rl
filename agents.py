@@ -20,8 +20,8 @@ class Tabular(baseagent.Agent):
             return self.env.T_val
         return self._q[s][a]
     
-    def update(self, s, a, r, new_s, new_a, diff):
-        self._q[s][a] += diff
+    def update(self, diff, tgt_s, tgt_a):
+        self._q[tgt_s][tgt_a] += diff
 
 
 ## ----------- BELOW NOT FINISHED -----------
