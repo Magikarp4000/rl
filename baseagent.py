@@ -54,21 +54,23 @@ class Agent(ABC):
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
-        utils.graph(steps_list, 'Num steps', 'Episode')
+        utils.graph(steps_list, 'Episode', 'Num steps')
 
     def _train_episode(self, eps, expstart):
+        self.algo.init_episode()
         s, a = self._init_state_action(expstart)
         cmd = Command()
+        is_terminal = False
         step = 0
 
         while not cmd.terminate:
-            is_terminal = s == self.env.T
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self._get_action(new_s, eps=eps)
+                is_terminal = new_s == self.env.T
 
             cmd = self.algo(self, s, a, r, new_s, new_a, step, is_terminal)
-            if not cmd.no_update and not cmd.terminate:
+            if not cmd.no_update:
                 self.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
 
             if not is_terminal:
