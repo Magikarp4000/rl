@@ -29,6 +29,9 @@ class Env(ABC):
     @abstractmethod
     def rand_action(self, s): pass
 
+    @abstractmethod
+    def action_spec(self, s): pass
+
 
 class DiscreteEnv(Env):
     def __init__(self, states=[], actions=[], start_states=[]):
@@ -46,6 +49,9 @@ class DiscreteEnv(Env):
     
     def rand_action(self, s):
         return random.randint(0, len(self.actions[s]))
+    
+    def action_spec(self, s):
+        return range(len(self.actions[s]))
 
 
 class ContinuousEnv(Env):
@@ -63,3 +69,6 @@ class ContinuousEnv(Env):
 
     def rand_action(self, s):
         return random.randint(0, len(self.base_actions))
+    
+    def action_spec(self, s):
+        return range(len(self.base_actions))
