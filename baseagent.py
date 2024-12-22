@@ -11,7 +11,7 @@ import envs
 
 
 class Agent(ABC):
-    def __init__(self, algo, env: envs.Env, config):
+    def __init__(self, algo, env: envs.Env, config=[]):
         super().__init__()
         self.algo = algo
         self.env = env
@@ -65,7 +65,7 @@ class Agent(ABC):
         else:
             return self.env.rand_start_state()
 
-    def _init_state_action(self, expstart):
+    def _init_state_action(self, expstart=False):
         s = self._init_state(expstart)
         a = self._get_action(s)
         return s, a

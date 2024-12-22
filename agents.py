@@ -9,16 +9,15 @@ from network import Network
 
 
 class Tabular(baseagent.Agent):
-    def __init__(self, algo, env: envs.DiscreteEnv=None):
+    def __init__(self, algo, env: envs.DiscreteEnv):
         super().__init__(algo, env, ['_q'])
         self._q = []
         if env is not None:
-            self._q = utils.fit_shape(env.actions, 0)
+            self._q = utils.fit_shape(0, env.actions)
 
     def q(self, s, a):
         if s == self.env.T:
             return self.env.T_val
-        print(s, a)
         return self._q[s][a]
     
     def update(self, s, a, r, new_s, new_a, diff):

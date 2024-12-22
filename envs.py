@@ -46,7 +46,7 @@ class DiscreteEnv(Env):
         self.size = len(states)
 
     def rand_state(self):
-        return random.randint(0, self.size)
+        return random.randint(0, self.size - 1)
     
     def rand_start_state(self):
         return random.choice(self.start_states)
