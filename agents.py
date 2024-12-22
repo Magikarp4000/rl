@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 import random
 
 import baseagent
@@ -9,11 +8,6 @@ from tilecoding import TileCoding
 from network import Network
 
 
-class Approximator(ABC):
-    def __init__(self, config=[]):
-        self.config = config
-
-
 class Tabular(baseagent.Agent):
     def __init__(self, algo, env: envs.DiscreteEnv=None):
         super().__init__(algo, env, ['_q'])
@@ -22,6 +16,9 @@ class Tabular(baseagent.Agent):
             self._q = utils.fit_shape(env.actions, 0)
 
     def q(self, s, a):
+        if s == self.env.T:
+            return self.env.T_val
+        print(s, a)
         return self._q[s][a]
     
     def update(self, s, a, r, new_s, new_a, diff):
@@ -29,11 +26,11 @@ class Tabular(baseagent.Agent):
 
 
 ## ----------- BELOW NOT FINISHED -----------
-class TileCode(Approximator):
+class TileCode(baseagent.Agent):
     pass
 
 
-class NN(Approximator):
+class NN(baseagent.Agent):
     def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0):
         super().__init__(base_actions, bounds, start_bounds, dim)
         self.cache = []

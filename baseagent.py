@@ -15,10 +15,6 @@ class Agent(ABC):
         super().__init__()
         self.algo = algo
         self.env = env
-        
-        self.terminal = 'T'
-        self.terminal_reward = 0
-        self.terminal_action = 0
 
         self._config = config
         self._metadata = {}
@@ -30,7 +26,7 @@ class Agent(ABC):
     def _save_params(self, *args, **kwargs):
         try:
             train_args = inspect.getargs(self.train)[1: 4]
-            core_args = inspect.getargs(self.core)[6:]
+            core_args = inspect.getargs(self.algo.__call__)[6:]
             self._config_meta({name: val for name, val in zip(train_args, args)})
             self._config_meta({name: val for name, val in zip(core_args, args)})
             self._config_meta(kwargs)
@@ -54,7 +50,7 @@ class Agent(ABC):
     def _train_episode(self, eps, expstart, *args, **kwargs):
         s, a = self._init_state_action(expstart)
         steps = 0
-        while s != self.terminal:
+        while s != self.env.T:
             new_s, r = self.env.next_state(s, a)
             new_a = self._get_action(new_s, eps=eps)
             diff = self.algo(self, s, a, r, new_s, new_a, *args, **kwargs)
@@ -69,12 +65,14 @@ class Agent(ABC):
         else:
             return self.env.rand_start_state()
 
-    def _init_state_action(self):
-        s = self._init_state()
+    def _init_state_action(self, expstart):
+        s = self._init_state(expstart)
         a = self._get_action(s)
         return s, a
 
     def _get_action(self, s, eps=0):
+        if s == self.env.T:
+            return self.env.T_action
         if random.random() < eps:
             return self.env.rand_action(s)
         else:
@@ -83,7 +81,7 @@ class Agent(ABC):
     def _single_test(self, max_step, eps):
         steps = 0
         s, a = self._init_state_action()
-        while s != self.terminal and (max_step is None or steps < max_step):
+        while s != self.env.T and (max_step is None or steps < max_step):
             a = self._get_action(s, eps=eps)
             s, _ = self.env.next_state(s, a)
             steps += 1
@@ -129,7 +127,7 @@ class Agent(ABC):
         self.init_train(*args, **kwargs)
 
         start_time = time.time()
-        self._train(n, eps, batch_size, *args, **kwargs)
+        self._train(n, eps, expstart, batch_size, *args, **kwargs)
         end_time = time.time()
 
         if save_time:

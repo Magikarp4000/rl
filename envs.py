@@ -6,6 +6,10 @@ import data_transfer
 class Env(ABC):
     def __init__(self, config=[]):
         self.config = config
+        self.T = 'T'
+        self.T_reward = 0
+        self.T_action = 0
+        self.T_val = 0
     
     def load(self, file):
         data = data_transfer.load(file)
@@ -48,7 +52,7 @@ class DiscreteEnv(Env):
         return random.choice(self.start_states)
     
     def rand_action(self, s):
-        return random.randint(0, len(self.actions[s]))
+        return random.randint(0, len(self.actions[s]) - 1)
     
     def action_spec(self, s):
         return range(len(self.actions[s]))
@@ -68,7 +72,7 @@ class ContinuousEnv(Env):
         return [random.uniform(*bound) for bound in self.start_bounds]
 
     def rand_action(self, s):
-        return random.randint(0, len(self.base_actions))
+        return random.randint(0, len(self.base_actions) - 1)
     
     def action_spec(self, s):
         return range(len(self.base_actions))
