@@ -7,20 +7,20 @@ import numpy as np
 
 import utils
 import data_transfer
-import approx
 import envs
 
 
 class Agent(ABC):
-    def __init__(self, approx: approx.Approximator, env: envs.Env):
+    def __init__(self, algo, env: envs.Env, config):
         super().__init__()
-        self.approx = approx
+        self.algo = algo
         self.env = env
         
         self.terminal = 'T'
         self.terminal_reward = 0
         self.terminal_action = 0
 
+        self._config = []
         self._metadata = {}
     
     def _config_meta(self, data):
@@ -57,8 +57,8 @@ class Agent(ABC):
         while s != self.terminal:
             new_s, r = self.env.next_state(s, a)
             new_a = self._get_action(new_s, eps=eps)
-            diff = self.core(s, a, r, new_s, new_a, *args, **kwargs)
-            self.approx.update(s, a, r, new_s, new_a, diff)
+            diff = self.algo(self, s, a, r, new_s, new_a, *args, **kwargs)
+            self.update(s, a, r, new_s, new_a, diff)
             s, a = new_s, new_a
             steps += 1
         return steps
@@ -78,7 +78,7 @@ class Agent(ABC):
         if random.random() < eps:
             return self.env.rand_action(s)
         else:
-            return np.argmax([self.approx.q(s, a) for a in range(len(self.env.base_actions[s]))])
+            return np.argmax([self.q(s, a) for a in self.env.action_spec(s)])
     
     def _single_test(self, max_step, eps):
         steps = 0
@@ -97,17 +97,20 @@ class Agent(ABC):
         for name in to_load:
             if name == 'metadata':
                 self._metadata = to_load[name]
-            elif name in self.approx.config:
-                setattr(self.approx, name, to_load[name])
+            elif name in self._config:
+                setattr(self, name, to_load[name])
         self.load_convert()
         if load_actions and 'actions' in to_load:
             self.actions = [[tuple(x) for x in state] for state in to_load['actions']]
         print(f'Loaded model {file_name}.json!')
     
-    def save(self, file_name):
+    def save(self, file_name, env_name):
+        self.env.save(env_name)
+        print(f'Saved environment to {file_name}.json!')
+
         self.save_convert()
         to_save = {'metadata': self._metadata}
-        for name in self.approx.get_data():
+        for name in self._config:
             try:
                 value = getattr(self, name)
                 json.dumps(value)
@@ -117,25 +120,31 @@ class Agent(ABC):
             except AttributeError:
                 print(f"SAVE_WARNING: '{name}' doesn't exist!")
         data_transfer.save(file_name, to_save)
+        print(f'Saved model to {file_name}.json!')
     
     def train(self, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True, *args, **kwargs):
         if save_params:
             self._save_params(n, eps, expstart, *args, **kwargs)
         
-        self.approx.init_train(*args, **kwargs)
+        self.init_train(*args, **kwargs)
 
         start_time = time.time()
         self._train(n, eps, batch_size, *args, **kwargs)
         end_time = time.time()
 
         if save_time:
-            self.config_meta({'duration': str(end_time - start_time)})
-            self.config_meta({'time': str(datetime.datetime.now())})
+            self._config_meta({'duration': str(end_time - start_time)})
+            self._config_meta({'time': str(datetime.datetime.now())})
     
     def test(self, num_steps=1, max_step=None, eps=0):
         return np.mean([self._single_test(max_step, eps)] * num_steps)
 
-    @abstractmethod
-    def core(self, s, a, r, new_s, new_a, *args, **kwargs): pass
     def load_convert(self): pass
     def save_convert(self): pass
+    def init_train(self): pass
+    def v(self, s): pass
+    def v_prime(self, s): pass
+    def q(self, s, a): pass
+    def q_prime(self, s, a): pass
+    @abstractmethod
+    def update(self, s, a, r, new_s, new_a, diff): pass

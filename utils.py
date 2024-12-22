@@ -74,12 +74,12 @@ def force_round(x, num_round):
 def get_dir_path(file):
     return os.path.dirname(os.path.realpath(file))
 
-def shape(val, arr):
+def fit_shape(val, arr):
     if not isinstance(arr, list):
         return val
     res = []
     for x in arr:
-        res.append(shape(val, x))
+        res.append(fit_shape(val, x))
     return res
 
 def graph(y, xlabel=None, ylabel=None):
