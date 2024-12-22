@@ -11,9 +11,9 @@ import envs
 
 
 class Agent(ABC):
-    def __init__(self, algo, env: envs.Env, config=[]):
+    def __init__(self, env: envs.Env, config=[]):
         super().__init__()
-        self.algo = algo
+        self.algo = None
         self.env = env
 
         self._config = config
@@ -25,39 +25,40 @@ class Agent(ABC):
 
     def _save_params(self, *args, **kwargs):
         try:
-            train_args = inspect.getfullargspec(self.train)[0][1: 4]
-            algo_args = self.algo.getargs()
+            train_args = inspect.getfullargspec(self.train)[0][2: 5]
+            algo_args = self.algo.get_params()
+            self._config_meta(algo_args)
             self._config_meta({name: val for name, val in zip(train_args, args)})
-            self._config_meta({name: val for name, val in zip(algo_args, args)})
             self._config_meta(kwargs)
         except IndexError:
             pass
+        print(self._metadata)
     
-    def _train(self, n, eps, expstart, batch_size, *args, **kwargs):
+    def _train(self, n, eps, expstart, batch_size):
         ep = 0
         steps_list = []
         self.cache_idx = 0
         while ep < n:
             start_time = time.time()
             for _ in range(batch_size):
-                steps = self._train_episode(eps, expstart, *args, **kwargs)
+                steps = self._train_episode(eps, expstart)
                 steps_list.append(steps)
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         utils.graph(steps_list, 'Num steps', 'Episode')
 
-    def _train_episode(self, eps, expstart, *args, **kwargs):
+    def _train_episode(self, eps, expstart):
         s, a = self._init_state_action(expstart)
-        steps = 0
+        step = 0
         while s != self.env.T:
             new_s, r = self.env.next_state(s, a)
             new_a = self._get_action(new_s, eps=eps)
-            diff = self.algo(self, s, a, r, new_s, new_a, *args, **kwargs)
+            diff = self.algo(self, s, a, r, new_s, new_a, step)
             self.update(s, a, r, new_s, new_a, diff)
             s, a = new_s, new_a
-            steps += 1
-        return steps
+            step += 1
+        return step
     
     def _init_state(self, expstart):
         if expstart:
@@ -120,14 +121,14 @@ class Agent(ABC):
         data_transfer.save(file_name, to_save)
         print(f'Saved model to {file_name}.json!')
     
-    def train(self, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True, *args, **kwargs):
-        if save_params:
-            self._save_params(n, eps, expstart, *args, **kwargs)
+    def train(self, algo, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
+        self.algo = algo
         
-        self.init_train(*args, **kwargs)
-
+        if save_params:
+            self._save_params(n, eps, expstart)
+        
         start_time = time.time()
-        self._train(n, eps, expstart, batch_size, *args, **kwargs)
+        self._train(n, eps, expstart, batch_size)
         end_time = time.time()
 
         if save_time:
@@ -139,7 +140,6 @@ class Agent(ABC):
 
     def load_convert(self): pass
     def save_convert(self): pass
-    def init_train(self): pass
     def v(self, s): pass
     def v_prime(self, s): pass
     def q(self, s, a): pass
