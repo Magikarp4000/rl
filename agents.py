@@ -7,69 +7,16 @@ import numpy as np
 from matplotlib import pyplot as pl
 
 import data_transfer
+import envs
 from tilecoding import TileCoding
 from network import Network
 
 
-class Env:
-    @abstractmethod
-    def next_state(self, s, a, *args, **kwargs): pass
-    
-    @abstractmethod
-    def rand_state(self): pass
-    
-    @abstractmethod
-    def rand_start_state(self): pass
-    
-    @abstractmethod
-    def rand_action(self, s): pass
+class Approximator(ABC):
+    def __init__(self, config=[]):
+        self.config = config
 
-
-class DiscreteEnv(Env):
-    def __init__(self, states=[], actions=[], start_states=[]):
-        self.states = states
-        self.actions = actions
-        self.start_states = start_states  # state indices
-        self.size = len(states)
-    
-    def rand_state(self):
-        return random.randint(0, self.size)
-    
-    def rand_start_state(self):
-        return random.choice(self.start_states)
-    
-    def rand_action(self, s):
-        return random.randint(0, len(self.actions[s]))
-
-
-class ContinuousEnv(Env):
-    def __init__(self, base_actions=[], bounds=[], start_bounds=[]):
-        self.base_actions = base_actions
-        self.bounds = bounds
-        self.start_bounds = start_bounds
-    
-    def rand_state(self):
-        return [random.uniform(*bound) for bound in self.bounds]
-    
-    def rand_start_state(self):
-        return [random.uniform(*bound) for bound in self.start_bounds]
-
-    def rand_action(self, s):
-        return random.randint(0, len(self.base_actions))
-
-
-class Approximator:
-    def __init__(self):
-        self._data = []
-    
-    def config(self, data):
-        for val in reversed(data):
-            if val not in self._data:
-                self._data.insert(0, val)
-    
-    def get_data(self):
-        return self._data
-
+    def init_train(self): pass
     def v(self, s): pass
     def v_prime(self, s): pass
     def q(self, s, a): pass
@@ -78,8 +25,8 @@ class Approximator:
     def update(self, s, a, r, new_s, new_a, diff): pass
 
 
-class Agent:
-    def __init__(self, approx: Approximator, env: Env):
+class Agent(ABC):
+    def __init__(self, approx: Approximator, env: envs.Env):
         super().__init__()
         self.approx = approx
         self.env = env
@@ -156,17 +103,20 @@ class Agent:
             steps += 1
         return steps
 
-    def load(self, file_name, load_actions=False):
+    def load(self, file_name, env_name, load_actions=False):
+        self.env.load(env_name)
+        print(f'Loaded environment {file_name}.json!')
+
         to_load = data_transfer.load(file_name)
         for name in to_load:
             if name == 'metadata':
                 self._metadata = to_load[name]
-            elif name in self.approx.get_data():
-                setattr(self, name, to_load[name])
+            elif name in self.approx.config:
+                setattr(self.approx, name, to_load[name])
         self.load_convert()
         if load_actions and 'actions' in to_load:
             self.actions = [[tuple(x) for x in state] for state in to_load['actions']]
-        print(f'Loaded {file_name}.json!')
+        print(f'Loaded model {file_name}.json!')
     
     def save(self, file_name):
         self.save_convert()
@@ -186,7 +136,7 @@ class Agent:
         if save_params:
             self._save_params(n, eps, expstart, *args, **kwargs)
         
-        self.init_train(*args, **kwargs)
+        self.approx.init_train(*args, **kwargs)
 
         start_time = time.time()
         self._train(n, eps, batch_size, *args, **kwargs)
@@ -210,12 +160,12 @@ class Sarsa(Agent):
         return alpha * (r + gamma * self.approx.q(new_s, new_a) - self.approx.q(s, a))
 
 
-## ----------- BELOW NOT FINISHED -----------
 class Tabular(Approximator):
-    def __init__(self, env: DiscreteEnv):
-        super().__init__()
-        self._q = shape(env.actions, 0)
-        self.config(['_q'])
+    def __init__(self, env: envs.DiscreteEnv=None):
+        super().__init__(['_q'])
+        self._q = []
+        if env is not None:
+            self._q = shape(env.actions, 0)
 
     def q(self, s, a):
         return self._q[s][a]
@@ -224,6 +174,7 @@ class Tabular(Approximator):
         self._q[s][a] += diff
 
 
+## ----------- BELOW NOT FINISHED -----------
 class TileCode(Approximator):
     pass
 
@@ -273,3 +224,15 @@ def shape(val, arr):
     for x in arr:
         res.append(shape(val, x))
     return res
+
+
+# ----- TEST -----
+class Bruh(envs.DiscreteEnv):
+    def next_state(self, s, a, *args, **kwargs):
+        return super().next_state(s, a, *args, **kwargs)
+
+
+agent = Sarsa(Tabular(), Bruh())
+agent.load(file_name='envtest', env_name='envtest')
+print(agent.env.actions)
+print(agent.approx._q)
