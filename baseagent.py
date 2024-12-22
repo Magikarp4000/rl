@@ -20,7 +20,7 @@ class Agent(ABC):
         self.terminal_reward = 0
         self.terminal_action = 0
 
-        self._config = []
+        self._config = config
         self._metadata = {}
     
     def _config_meta(self, data):

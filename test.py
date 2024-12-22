@@ -9,6 +9,6 @@ class Bruh(envs.DiscreteEnv):
 
 
 agent = agents.Tabular(algos.Sarsa(), Bruh())
-agent.load(file_name='envtest', env_name='envtest')
+agent.load(file_name='modeltest', env_name='envtest')
 print(agent.env.actions)
-print(agent.approx._q)
+print(agent._q)
