@@ -25,10 +25,10 @@ class Agent(ABC):
 
     def _save_params(self, *args, **kwargs):
         try:
-            train_args = inspect.getargs(self.train)[1: 4]
-            core_args = inspect.getargs(self.algo.__call__)[6:]
+            train_args = inspect.getfullargspec(self.train)[0][1: 4]
+            algo_args = self.algo.getargs()
             self._config_meta({name: val for name, val in zip(train_args, args)})
-            self._config_meta({name: val for name, val in zip(core_args, args)})
+            self._config_meta({name: val for name, val in zip(algo_args, args)})
             self._config_meta(kwargs)
         except IndexError:
             pass

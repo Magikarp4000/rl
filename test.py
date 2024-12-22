@@ -19,5 +19,4 @@ class TestEnv(envs.DiscreteEnv):
 # print(agent._q)
 
 agent = agents.Tabular(algos.Qlearn(), TestEnv([10,20], [[1],[2,3]], [1]))
-agent.train(n=100, save_params=False)
-print(agent._q)
+agent.train(n=100, batch_size=10)

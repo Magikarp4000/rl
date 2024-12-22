@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
+import inspect
 import baseagent
 
 
 class Algo(ABC):
+    def getargs(self):
+        return inspect.getfullargspec(self.__call__)[0][7:]
+
     @abstractmethod
     def __call__(self, agent: baseagent.Agent, s, a, r, new_s, new_a, *args, **kwargs):
         pass
@@ -37,3 +41,11 @@ class Qlearn(Algo):
                  gamma=0.9):
         best = max([agent.q(new_s, next_a) for next_a in agent.env.action_spec(new_s)])
         return alpha * (r + gamma * best - agent.q(s, a))
+
+
+class NStepSarsa(Algo):
+    def __call__(self, agent, s, a, r, new_s, new_a,
+                 alpha=0.1,
+                 gamma=0.9,
+                 nsteps=1):
+        return super().__call__(agent, s, a, r, new_s, new_a, *args, **kwargs)
