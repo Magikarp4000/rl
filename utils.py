@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import matplotlib.pyplot as pl
 
 
 BLACK = (0, 0, 0)
@@ -8,6 +9,9 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
+
+def random_argmax(arr):
+    return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
 
 def normalise_bounds(x, b):
     try:
@@ -69,3 +73,17 @@ def force_round(x, num_round):
 
 def get_dir_path(file):
     return os.path.dirname(os.path.realpath(file))
+
+def shape(val, arr):
+    if not isinstance(arr, list):
+        return val
+    res = []
+    for x in arr:
+        res.append(shape(val, x))
+    return res
+
+def graph(y, xlabel=None, ylabel=None):
+    pl.xlabel(xlabel)
+    pl.ylabel(ylabel)
+    pl.plot(np.arange(len(y)), y)
+    pl.show()
