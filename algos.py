@@ -108,7 +108,6 @@ class NStepSarsa(Algo):
         for i in range(tgt_t + 1, end_t + 1):
             ret += cur_gamma * self.buffer.get(i)[2]
             cur_gamma *= self.gamma
-        # print(ret)
 
         end_s, end_a = self.buffer.get(end_t)[:2]
         ret += cur_gamma * agent.q(end_s, end_a)
@@ -117,5 +116,4 @@ class NStepSarsa(Algo):
         terminate = tgt_t >= self.T_step
 
         ret = self.alpha * (ret - agent.q(tgt_s, tgt_a))
-        # print(ret)
         return Command(ret, tgt_s, tgt_a, terminate)

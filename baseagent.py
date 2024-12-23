@@ -1,5 +1,6 @@
-import random, time, datetime
 from abc import ABC, abstractmethod
+import random, time, datetime
+import os
 import json
 import inspect
 
@@ -97,7 +98,7 @@ class Agent(ABC):
         else:
             return np.argmax([self.q(s, a) for a in self.env.action_spec(s)])
     
-    def _single_test(self, max_step, eps):
+    def _single_test(self, max_step=None, eps=0):
         steps = 0
         s, a = self._init_state_action()
         while s != self.env.T and (max_step is None or steps < max_step):
@@ -105,12 +106,22 @@ class Agent(ABC):
             s, _ = self.env.next_state(s, a)
             steps += 1
         return steps
+    
+    def _get_paths(self, model_name, env_name):
+        path = f"{utils.get_dir()}/{env_name}"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        model_path = f"{path}/{model_name}.json"
+        env_path = f"{path}/env.json"
+        return model_path, env_path
 
-    def load(self, file_name, env_name, load_actions=False):
-        self.env.load(env_name)
-        print(f'Loaded environment {file_name}.json!')
+    def load(self, model_name, env_name, load_actions=False):
+        model_path, env_path = self._get_paths(model_name, env_name)
 
-        to_load = data_transfer.load(file_name)
+        self.env.load(env_path)
+        print(f'Loaded environment {env_name}!')
+
+        to_load = data_transfer.load(model_path)
         for name in to_load:
             if name == 'metadata':
                 self._metadata = to_load[name]
@@ -119,11 +130,13 @@ class Agent(ABC):
         self.load_convert()
         if load_actions and 'actions' in to_load:
             self.actions = [[tuple(x) for x in state] for state in to_load['actions']]
-        print(f'Loaded model {file_name}.json!')
+        print(f'Loaded model {model_name}!')
     
-    def save(self, file_name, env_name):
-        self.env.save(env_name)
-        print(f'Saved environment to {file_name}.json!')
+    def save(self, model_name, env_name):
+        model_path, env_path = self._get_paths(model_name, env_name)
+        
+        self.env.save(env_path)
+        print(f'Saved environment to {env_name}.json!')
 
         self.save_convert()
         to_save = {'metadata': self._metadata}
@@ -136,8 +149,8 @@ class Agent(ABC):
                 print(f"SAVE_WARNING: '{name}' (type {type(value)}) is not JSON serializable!")
             except AttributeError:
                 print(f"SAVE_WARNING: '{name}' doesn't exist!")
-        data_transfer.save(file_name, to_save)
-        print(f'Saved model to {file_name}.json!')
+        data_transfer.save(model_path, to_save)
+        print(f'Saved model to {model_name}!')
     
     def train(self, algo, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
         self.algo = algo

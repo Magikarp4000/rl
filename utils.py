@@ -71,7 +71,7 @@ def force_round(x, num_round):
     x_str += '0' * max(0, num_round - length)
     return x_str
 
-def get_dir_path(file):
+def get_dir(file=__file__):
     return os.path.dirname(os.path.realpath(file))
 
 def fit_shape(val, arr):
