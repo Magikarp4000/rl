@@ -57,8 +57,8 @@ class Agent(ABC):
         utils.graph(steps_list, 'Episode', 'Num steps')
 
     def _train_episode(self, eps, expstart):
-        self.algo.init_episode()
         s, a = self._init_state_action(expstart)
+        self.algo.init_episode(s, a)
         cmd = Command()
         is_terminal = False
         step = 0
@@ -73,8 +73,7 @@ class Agent(ABC):
             if not cmd.no_update:
                 self.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
 
-            if not is_terminal:
-                s, a = new_s, new_a
+            s, a = new_s, new_a
             step += 1
         
         return step
