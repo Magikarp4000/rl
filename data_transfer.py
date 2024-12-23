@@ -7,8 +7,8 @@ def load(path):
         to_load = json.load(open(path, 'r'))
         return to_load
     except FileNotFoundError:
-        print("LOAD_ERROR: File doesn't exist!\n")
+        raise FileNotFoundError(f"File {path} doesn't exist!\n")
 
 def save(path, to_save={}):
     # Save into json file
-    open(path, 'w').write(json.dumps(to_save))    
+    open(path, 'w').write(json.dumps(to_save))
