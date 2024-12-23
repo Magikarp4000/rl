@@ -21,10 +21,11 @@ class Command:
 
 
 class Agent(ABC):
-    def __init__(self, env: envs.Env, config=[]):
+    def __init__(self, env: envs.Env, name: str, config=[]):
         super().__init__()
         self.algo = None
         self.env = env
+        self.name = name
 
         self._config = config
         self._metadata = {}
@@ -37,6 +38,7 @@ class Agent(ABC):
         try:
             train_args = inspect.getfullargspec(self.train)[0][2: 5]
             algo_args = self.algo.get_params()
+            self._config_meta({"approximator": self.name})
             self._config_meta(algo_args)
             self._config_meta({name: val for name, val in zip(train_args, args)})
             self._config_meta(kwargs)

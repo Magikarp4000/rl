@@ -10,7 +10,7 @@ from network import Network
 
 class Tabular(baseagent.Agent):
     def __init__(self, env: envs.DiscreteEnv):
-        super().__init__(env, ['_q'])
+        super().__init__(env, 'tabular', ['_q'])
         self._q = []
         if env is not None:
             self._q = utils.fit_shape(0, env.actions)
