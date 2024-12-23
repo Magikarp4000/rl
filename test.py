@@ -19,6 +19,6 @@ class TestEnv(envs.DiscreteEnv):
 # print(agent._q)
 
 agent = agents.Tabular(TestEnv([10,20], [[1],[2,3]], [1]))
-agent.train(algos.Sarsa(alpha=0.1, gamma=0.9), n=100, batch_size=10)
-# agent.train(algos.NStepSarsa(alpha=0.1, gamma=0.9, nstep=1), n=100, batch_size=10)
+# agent.train(algos.Sarsa(alpha=0.1, gamma=0.9), n=100, batch_size=10)
+agent.train(algos.NStepSarsa(alpha=0.1, gamma=0.9, nstep=10), n=100, batch_size=10)
 print(agent._q)

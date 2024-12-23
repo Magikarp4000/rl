@@ -98,23 +98,24 @@ class NStepSarsa(Algo):
         if t <= self.T_step:
             self.buffer.set(t + 1, (new_s, new_a, r))
         
-        prev = t - self.nstep + 1
-        if prev < 0:
+        tgt_t = t - self.nstep + 1
+        if tgt_t < 0:
             return Command(no_update=True)
         
         ret = 0
         cur_gamma = 1
-        for i in range(prev + 1, min(t + 2, self.T_step + 2)):
+        end_t = min(t + 1, self.T_step + 1)
+        for i in range(tgt_t + 1, end_t + 1):
             ret += cur_gamma * self.buffer.get(i)[2]
             cur_gamma *= self.gamma
         # print(ret)
 
-        end_s, end_a = self.buffer.get(t + 1)[:2]
+        end_s, end_a = self.buffer.get(end_t)[:2]
         ret += cur_gamma * agent.q(end_s, end_a)
 
-        prev_s, prev_a = self.buffer.get(prev)[:2]
-        terminate = prev >= self.T_step
+        tgt_s, tgt_a = self.buffer.get(tgt_t)[:2]
+        terminate = tgt_t >= self.T_step
 
-        ret = self.alpha * (ret - agent.q(prev_s, prev_a))
-        print(ret)
-        return Command(ret, prev_s, prev_a, terminate)
+        ret = self.alpha * (ret - agent.q(tgt_s, tgt_a))
+        # print(ret)
+        return Command(ret, tgt_s, tgt_a, terminate)
