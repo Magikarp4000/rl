@@ -107,20 +107,7 @@ class Agent(ABC):
             steps += 1
         return steps
     
-    def _get_paths(self, model_name, env_name):
-        path = f"{utils.get_dir()}/{env_name}"
-        if not os.path.exists(path):
-            os.makedirs(path)
-        model_path = f"{path}/{model_name}.json"
-        env_path = f"{path}/env.json"
-        return model_path, env_path
-
-    def load(self, model_name, env_name, load_actions=False):
-        model_path, env_path = self._get_paths(model_name, env_name)
-
-        self.env.load(env_path)
-        print(f'Loaded environment {env_name}!')
-
+    def _load_model(self, model_path):
         to_load = data_transfer.load(model_path)
         for name in to_load:
             if name == 'metadata':
@@ -128,16 +115,8 @@ class Agent(ABC):
             elif name in self._config:
                 setattr(self, name, to_load[name])
         self.load_convert()
-        if load_actions and 'actions' in to_load:
-            self.actions = [[tuple(x) for x in state] for state in to_load['actions']]
-        print(f'Loaded model {model_name}!')
     
-    def save(self, model_name, env_name):
-        model_path, env_path = self._get_paths(model_name, env_name)
-        
-        self.env.save(env_path)
-        print(f'Saved environment to {env_name}.json!')
-
+    def _save_model(self, model_path):
         self.save_convert()
         to_save = {'metadata': self._metadata}
         for name in self._config:
@@ -150,7 +129,32 @@ class Agent(ABC):
             except AttributeError:
                 print(f"SAVE_WARNING: '{name}' doesn't exist!")
         data_transfer.save(model_path, to_save)
-        print(f'Saved model to {model_name}!')
+
+    def _get_paths(self, model_name, env_name):
+        path = f"{utils.get_dir()}/{env_name}"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        model_path = f"{path}/{model_name}.json"
+        env_path = f"{path}/env.json"
+        return model_path, env_path
+
+    def load(self, model_name, env_name):
+        model_path, env_path = self._get_paths(model_name, env_name)
+
+        self.env.load(env_path)
+        print(f'Loaded environment {env_name}!')
+
+        self._load_model(model_name, model_path)
+        print(f'Loaded model {model_name}!')
+    
+    def save(self, model_name, env_name):
+        model_path, env_path = self._get_paths(model_name, env_name)
+        
+        self.env.save(env_path)
+        print(f'Saved environment {env_name}!')
+
+        self._save_model(model_name, model_path)
+        print(f'Saved model {model_name}!')
     
     def train(self, algo, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
         self.algo = algo
