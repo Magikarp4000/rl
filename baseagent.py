@@ -86,7 +86,7 @@ class Agent(ABC):
 
     def _init_state_action(self, expstart=False):
         s = self._init_state(expstart)
-        a = self._get_action(s)
+        a = self._get_action(s, eps=1)
         return s, a
 
     def _get_action(self, s, eps=0):
