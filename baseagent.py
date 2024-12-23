@@ -130,11 +130,15 @@ class Agent(ABC):
                 print(f"SAVE_WARNING: '{name}' doesn't exist!")
         data_transfer.save(model_path, to_save)
     
-    def _confirm_save(self, model_name, model_path):
+    def _confirm_save_env(self, env_path, overwrite_env):
+        return overwrite_env or not os.path.exists(env_path)
+    
+    def _confirm_save_model(self, model_name, env_name, model_path):
         if os.path.exists(model_path):
             response = ""
             while response.lower() not in ("y", "n"):
-                response = input(f"Model {model_name} already exists. Overwrite (y/n)? ")
+                response = input(
+                    f"Model {model_name} already exists for environment {env_name}. Overwrite (y/n)? ")
             return response.lower() == "y"
         return True
 
@@ -155,13 +159,14 @@ class Agent(ABC):
         self._load_model(model_path)
         print(f'Loaded model {model_name}!')
     
-    def save(self, model_name, env_name):
+    def save(self, model_name, env_name, overwrite_env=False):
         model_path, env_path = self._get_paths(model_name, env_name)
         
-        self.env.save(env_path)
-        print(f'Saved environment {env_name}!')
+        if self._confirm_save_env(env_path, overwrite_env):
+            self.env.save(env_path)
+            print(f'Saved environment {env_name}!')
 
-        if self._confirm_save(model_name, model_path):
+        if self._confirm_save_model(model_name, env_name, model_path):
             self._save_model(model_path)
             print(f'Saved model {model_name}!')
     
