@@ -105,19 +105,19 @@ class NStepAlgo(Algo):
 
     def get_return(self, agent: Agent, t, tgt_t):
         end_t = min(t + 1, self.T_step + 1)
-        ret = self.init_return(agent, *self.buffer.get(end_t))
+        ret = self.end_return(agent, *self.buffer.get(end_t))
         for i in range(end_t - 1, tgt_t, -1):
             ret = self.step_return(agent, *self.buffer.get(i), ret)
         return ret
     
     @abstractmethod
-    def init_return(self, agent, s, a, r): pass
+    def end_return(self, agent, s, a, r): pass
     @abstractmethod
     def step_return(self, agent, s, a, r, ret): pass
 
 
 class NStepSarsa(NStepAlgo):
-    def init_return(self, agent, s, a, r):
+    def end_return(self, agent, s, a, r):
         return r + self.gamma * agent.q(s, a)
     
     def step_return(self, agent, s, a, r, ret):
@@ -125,15 +125,16 @@ class NStepSarsa(NStepAlgo):
 
 
 class NStepExpectedSarsa(NStepAlgo):
-    def init_return(self, agent, s, a, r):
-        return r + self.gamma * sum([agent.action_prob(s, a) * agent.q(s, a)])
+    def end_return(self, agent, s, a, r):
+        return r + self.gamma * sum([agent.action_prob(s, cur_a) * agent.q(s, cur_a)
+                                     for cur_a in agent.env.action_spec(s)])
     
     def step_return(self, agent, s, a, r, ret):
         return r + self.gamma * ret
 
 
 class NStepQLearn(NStepAlgo):
-    def init_return(self, agent, s, a, r):
+    def end_return(self, agent, s, a, r):
         return r + self.gamma * agent.best_action_val(s)
     
     def step_return(self, agent, s, a, r, ret):
@@ -141,12 +142,21 @@ class NStepQLearn(NStepAlgo):
 
 
 class TreeLearn(NStepAlgo):
-    def init_return(self, agent, s, a, r):
+    def end_return(self, agent, s, a, r):
         return r + self.gamma * agent.best_action_val(s)
     
     def step_return(self, agent, s, a, r, ret):
         best_a = agent.best_action(s)
-        if a == best_a:
-            return r + self.gamma * ret
-        else:
-            return r + self.gamma * agent.q(s, best_a)
+        tmp = ret if a == best_a else agent.q(s, best_a)
+        return r + self.gamma * tmp
+
+
+class OnPolicyTreeLearn(NStepAlgo):
+    def end_return(self, agent, s, a, r):
+        return r + self.gamma * agent.best_action_val(s)
+    
+    def step_return(self, agent, s, a, r, ret):
+        best_a = agent.best_action(s)
+        tmp = sum([agent.action_prob(s, cur_a) * (ret if cur_a == best_a else agent.q(s, cur_a))
+                   for cur_a in agent.env.action_spec(s)])
+        return r + self.gamma * tmp
