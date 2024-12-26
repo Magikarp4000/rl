@@ -135,7 +135,7 @@ class NStepQLearn(NStepAlgo):
 
 class TreeLearn(NStepAlgo):
     def init_return(self, agent, s, a, r):
-        return r + self.gamma * agent.best_action(s)
+        return r + self.gamma * agent.best_action_val(s)
     
     def step_return(self, agent, s, a, r, ret):
         best_a = agent.best_action(s)
