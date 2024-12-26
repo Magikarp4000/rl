@@ -56,7 +56,7 @@ class QLearn(Algo):
         self.gamma = gamma
     
     def __call__(self, agent: Agent , s, a, r, new_s, new_a, t, is_terminal):
-        best = max([agent.q(new_s, next_a) for next_a in agent.env.action_spec(new_s)])
+        best = agent.best_action_val(s)
         ret = self.alpha * (r + self.gamma * best - agent.q(s, a))
         return Command(ret, s, a, is_terminal)
 
@@ -127,7 +127,7 @@ class NStepSarsa(NStepAlgo):
 
 class NStepQLearn(NStepAlgo):
     def init_return(self, agent, s, a, r):
-        return r + self.gamma * agent.best_action(s)
+        return r + self.gamma * agent.best_action_val(s)
     
     def step_return(self, agent, s, a, r, ret):
         return r + self.gamma * ret
