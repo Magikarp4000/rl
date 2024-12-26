@@ -62,24 +62,25 @@ class Agent(ABC):
     def _train_episode(self, eps, expstart):
         s, a = self._init_state_action(expstart)
         self.algo.init_episode(s, a)
+
         cmd = Command()
         is_terminal = False
-        step = 0
+        steps = 0
+        episode_steps = 0
 
         while not cmd.terminate:
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=eps)
-                is_terminal = new_s == self.env.T
-
-            cmd = self.algo(self, s, a, r, new_s, new_a, step, is_terminal)
+                if new_s == self.env.T:
+                    is_terminal = True
+                    episode_steps = steps + 1
+            cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if not cmd.no_update:
                 self.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
-
             s, a = new_s, new_a
-            step += 1
-        
-        return step
+            steps += 1
+        return episode_steps
     
     def _init_state(self, expstart):
         if expstart:
