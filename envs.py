@@ -20,7 +20,13 @@ class Env(ABC):
     def save(self, file):
         data = {name: getattr(self, name) for name in self.config}
         data_transfer.save(file, data)
+    
+    @abstractmethod
+    def num_actions(self, s): pass
 
+    @abstractmethod
+    def action_spec(self, s): pass
+    
     @abstractmethod
     def next_state(self, s, a, *args, **kwargs): pass
     
@@ -33,9 +39,6 @@ class Env(ABC):
     @abstractmethod
     def rand_action(self, s): pass
 
-    @abstractmethod
-    def action_spec(self, s): pass
-
 
 class DiscreteEnv(Env):
     def __init__(self, states=[], actions=[], start_states=[]):
@@ -44,6 +47,14 @@ class DiscreteEnv(Env):
         self.actions = actions
         self.start_states = start_states  # state indices
         self.size = len(states)
+    
+    def num_actions(self, s):
+        return len(self.actions[s])
+    
+    def action_spec(self, s):
+        if s == self.T:
+            return [0]
+        return range(self.num_actions(s))
 
     def rand_state(self):
         return random.randint(0, self.size - 1)
@@ -52,12 +63,7 @@ class DiscreteEnv(Env):
         return random.choice(self.start_states)
     
     def rand_action(self, s):
-        return random.randint(0, len(self.actions[s]) - 1)
-    
-    def action_spec(self, s):
-        if s == self.T:
-            return [0]
-        return range(len(self.actions[s]))
+        return random.randint(0, self.num_actions(s) - 1)
 
 
 class ContinuousEnv(Env):
@@ -67,6 +73,14 @@ class ContinuousEnv(Env):
         self.bounds = bounds
         self.start_bounds = start_bounds
     
+    def num_actions(self, s):
+        return len(self.base_actions)
+
+    def action_spec(self, s):
+        if s == self.T:
+            return [0]
+        return range(self.num_actions(s))
+    
     def rand_state(self):
         return [random.uniform(*bound) for bound in self.bounds]
     
@@ -74,7 +88,4 @@ class ContinuousEnv(Env):
         return [random.uniform(*bound) for bound in self.start_bounds]
 
     def rand_action(self, s):
-        return random.randint(0, len(self.base_actions) - 1)
-    
-    def action_spec(self, s):
-        return range(len(self.base_actions))
+        return random.randint(0, self.num_actions(s) - 1)

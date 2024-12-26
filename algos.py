@@ -124,6 +124,14 @@ class NStepSarsa(NStepAlgo):
         return r + self.gamma * ret
 
 
+class NStepExpectedSarsa(NStepAlgo):
+    def init_return(self, agent, s, a, r):
+        return r + self.gamma * sum([agent.action_prob(s, a) * agent.q(s, a)])
+    
+    def step_return(self, agent, s, a, r, ret):
+        return r + self.gamma * ret
+
+
 class NStepQLearn(NStepAlgo):
     def init_return(self, agent, s, a, r):
         return r + self.gamma * agent.best_action_val(s)

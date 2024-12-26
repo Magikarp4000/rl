@@ -6,9 +6,9 @@ import inspect
 
 import numpy as np
 
-from utils import (graph, get_dir, random_argmax)
+from utils import graph, get_dir, random_argmax
 import data_transfer
-import envs
+from envs import Env
 
 
 class Command:
@@ -21,11 +21,13 @@ class Command:
 
 
 class Agent(ABC):
-    def __init__(self, env: envs.Env, name: str, config=[]):
+    def __init__(self, env: Env, name: str, config=[]):
         super().__init__()
-        self.algo = None
         self.env = env
         self.name = name
+
+        self.algo = None
+        self.eps = None
 
         self._config = config
         self._metadata = {}
@@ -45,21 +47,21 @@ class Agent(ABC):
         except IndexError:
             pass
     
-    def _train(self, n, eps, expstart, batch_size):
+    def _train(self, n, expstart, batch_size):
         ep = 0
         steps_list = []
         self.cache_idx = 0
         while ep < n:
             start_time = time.time()
             for _ in range(batch_size):
-                steps = self._train_episode(eps, expstart)
+                steps = self._train_episode(expstart)
                 steps_list.append(steps)
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
         graph(steps_list, 'Episode', 'Num steps')
 
-    def _train_episode(self, eps, expstart):
+    def _train_episode(self, expstart):
         s, a = self._init_state_action(expstart)
         self.algo.init_episode(s, a)
 
@@ -71,7 +73,7 @@ class Agent(ABC):
         while not cmd.terminate:
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
-                new_a = self.get_action(new_s, eps=eps)
+                new_a = self.get_action(new_s, eps=self.eps)
                 if new_s == self.env.T:
                     is_terminal = True
                     episode_steps = steps + 1
@@ -153,14 +155,27 @@ class Agent(ABC):
         else:
             return self.best_action(s)
     
+    def action_vals(self, s):
+        return [self.q(s, a) for a in self.env.action_spec(s)]
+
     def best_action(self, s, rand_tiebreak=False):
         if rand_tiebreak:
-            return random_argmax([self.q(s, a) for a in self.env.action_spec(s)])
+            return random_argmax(self.action_vals(s))
         else:
-            return np.argmax([self.q(s, a) for a in self.env.action_spec(s)])
+            return np.argmax(self.action_vals(s))
     
     def best_action_val(self, s):
-        return max([self.q(s, a) for a in self.env.action_spec(s)])
+        return max(self.action_vals(s))
+    
+    def action_prob(self, s, a):
+        if s == self.env.T:
+            return 1
+        best_val = self.best_action_val(s)
+        prob = self.eps / self.env.num_actions(s)
+        if self.q(s, a) == best_val:
+            num_best = self.action_vals(s).count(best_val)
+            prob += (1 - self.eps) / num_best
+        return prob
 
     def load(self, model_name, env_name):
         model_path, env_path = self._get_paths(model_name, env_name)
@@ -184,12 +199,13 @@ class Agent(ABC):
     
     def train(self, algo, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
         self.algo = algo
+        self.eps = eps
         
         if save_params:
             self._save_params(n, eps, expstart)
         
         start_time = time.time()
-        self._train(n, eps, expstart, batch_size)
+        self._train(n, expstart, batch_size)
         end_time = time.time()
 
         if save_time:

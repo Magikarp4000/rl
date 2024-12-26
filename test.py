@@ -31,6 +31,6 @@ class TestEnv(envs.DiscreteEnv):
 
 agent = agents.Tabular(TestEnv())
 # agent.load('v0.1b', 'testenv')
-agent.train(algos.NStepSarsa(alpha=0.1, gamma=1, nstep=5), n=1000, batch_size=10)
+agent.train(algos.NStepExpectedSarsa(alpha=0.1, gamma=1, nstep=100), n=1000, batch_size=10)
 print(agent._q)
-agent.save('v0.1b', 'testenv')
+# agent.save('v0.1b', 'testenv')
