@@ -56,7 +56,7 @@ class QLearn(Algo):
         self.gamma = gamma
     
     def __call__(self, agent: Agent , s, a, r, new_s, new_a, t, is_terminal):
-        best = agent.best_action_val(s)
+        best = agent.best_action_val(new_s)
         ret = self.alpha * (r + self.gamma * best - agent.q(s, a))
         return Command(ret, s, a, is_terminal)
 
