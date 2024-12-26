@@ -1,8 +1,8 @@
+import random
+
 import agents
 import algos
 import envs
-
-import random
 
 
 class TestEnv(envs.DiscreteEnv):

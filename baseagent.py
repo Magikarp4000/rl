@@ -6,7 +6,7 @@ import inspect
 
 import numpy as np
 
-import utils
+from utils import (graph, get_dir, random_argmax)
 import data_transfer
 import envs
 
@@ -57,7 +57,7 @@ class Agent(ABC):
                 ep += 1
             end_time = time.time()
             print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
-        utils.graph(steps_list, 'Episode', 'Num steps')
+        graph(steps_list, 'Episode', 'Num steps')
 
     def _train_episode(self, eps, expstart):
         s, a = self._init_state_action(expstart)
@@ -69,7 +69,7 @@ class Agent(ABC):
         while not cmd.terminate:
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
-                new_a = self._get_action(new_s, eps=eps)
+                new_a = self.get_action(new_s, eps=eps)
                 is_terminal = new_s == self.env.T
 
             cmd = self.algo(self, s, a, r, new_s, new_a, step, is_terminal)
@@ -89,22 +89,14 @@ class Agent(ABC):
 
     def _init_state_action(self, expstart=False):
         s = self._init_state(expstart)
-        a = self._get_action(s, eps=1)
+        a = self.get_action(s, eps=1)
         return s, a
 
-    def _get_action(self, s, eps=0):
-        if s == self.env.T:
-            return self.env.T_action
-        if random.random() < eps:
-            return self.env.rand_action(s)
-        else:
-            return np.argmax([self.q(s, a) for a in self.env.action_spec(s)])
-    
     def _single_test(self, max_step=None, eps=0):
         steps = 0
         s, a = self._init_state_action()
         while s != self.env.T and (max_step is None or steps < max_step):
-            a = self._get_action(s, eps=eps)
+            a = self.get_action(s, eps=eps)
             s, _ = self.env.next_state(s, a)
             steps += 1
         return steps
@@ -145,12 +137,29 @@ class Agent(ABC):
         return True
 
     def _get_paths(self, model_name, env_name):
-        path = f"{utils.get_dir()}/{env_name}"
+        path = f"{get_dir()}/{env_name}"
         if not os.path.exists(path):
             os.makedirs(path)
         model_path = f"{path}/{model_name}.json"
         env_path = f"{path}/env.json"
         return model_path, env_path
+
+    def get_action(self, s, eps=0):
+        if s == self.env.T:
+            return self.env.T_action
+        if random.random() < eps:
+            return self.env.rand_action(s)
+        else:
+            return self.best_action(s)
+    
+    def best_action(self, s, rand_tiebreak=False):
+        if rand_tiebreak:
+            return random_argmax([self.q(s, a) for a in self.env.action_spec(s)])
+        else:
+            return np.argmax([self.q(s, a) for a in self.env.action_spec(s)])
+    
+    def best_action_val(self, s):
+        return max([self.q(s, a) for a in self.env.action_spec(s)])
 
     def load(self, model_name, env_name):
         model_path, env_path = self._get_paths(model_name, env_name)

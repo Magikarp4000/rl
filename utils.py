@@ -10,6 +10,22 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 
+class Buffer:
+    def __init__(self, size, default=None):
+        self.size = size
+        self.default = default
+        self._buffer = [default for _ in range(size)]
+    
+    def get(self, idx):
+        return self._buffer[idx % self.size]
+    
+    def set(self, idx, val):
+        self._buffer[idx % self.size] = val
+    
+    def reset(self):
+        self._buffer = [self.default for _ in range(self.size)]
+
+
 def random_argmax(arr):
     return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
 

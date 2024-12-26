@@ -4,22 +4,7 @@ import inspect
 import numpy as np
 
 from baseagent import Agent, Command
-
-
-class Buffer:
-    def __init__(self, size, default=None):
-        self.size = size
-        self.default = default
-        self._buffer = [default for _ in range(size)]
-    
-    def get(self, idx):
-        return self._buffer[idx % self.size]
-    
-    def set(self, idx, val):
-        self._buffer[idx % self.size] = val
-    
-    def reset(self):
-        self._buffer = [self.default for _ in range(self.size)]
+from utils import Buffer
 
 
 class Algo(ABC):
@@ -41,9 +26,9 @@ class Sarsa(Algo):
     """
     Parameters
     ----------
-    alpha : float, default=0.1
+    alpha : float [0, 1], default=0.1
         Step-size.
-    gamma : float, default=0.9
+    gamma : float [0, 1], default=0.9
         Discount-rate.
     """
     def __init__(self, alpha=0.1, gamma=0.9):
@@ -56,13 +41,13 @@ class Sarsa(Algo):
         return Command(ret, s, a, is_terminal)
 
 
-class Qlearn(Algo):
+class QLearn(Algo):
     """
     Parameters
     ----------
-    alpha : float, default=0.1
+    alpha : float [0, 1], default=0.1
         Step-size.
-    gamma : float, default=0.9
+    gamma : float [0, 1], default=0.9
         Discount-rate.
     """
     def __init__(self, alpha=0.1, gamma=0.9):
@@ -76,7 +61,17 @@ class Qlearn(Algo):
         return Command(ret, s, a, is_terminal)
 
 
-class NStepSarsa(Algo):
+class NStepAlgo(Algo):
+    """
+    Parameters
+    ----------
+    alpha : float [0, 1], default=0.1
+        Step-size.
+    gamma : float [0, 1], default=0.9
+        Discount-rate.
+    nstep : int [1, inf), default=5
+        Number of bootstrapped steps used in updates.
+    """
     def __init__(self, alpha=0.1, gamma=0.9, nstep=5):
         super().__init__('nstepsarsa')
         self.alpha = alpha
@@ -101,19 +96,50 @@ class NStepSarsa(Algo):
         tgt_t = t - self.nstep + 1
         if tgt_t < 0:
             return Command(no_update=True)
-        
-        ret = 0
-        cur_gamma = 1
-        end_t = min(t + 1, self.T_step + 1)
-        for i in range(tgt_t + 1, end_t + 1):
-            ret += cur_gamma * self.buffer.get(i)[2]
-            cur_gamma *= self.gamma
 
-        end_s, end_a = self.buffer.get(end_t)[:2]
-        ret += cur_gamma * agent.q(end_s, end_a)
+        ret = self.alpha * (self.get_return(agent, t, tgt_t) - agent.q(tgt_s, tgt_a))
 
         tgt_s, tgt_a = self.buffer.get(tgt_t)[:2]
         terminate = tgt_t >= self.T_step
 
-        ret = self.alpha * (ret - agent.q(tgt_s, tgt_a))
         return Command(ret, tgt_s, tgt_a, terminate)
+
+    def get_return(self, agent: Agent, t, tgt_t):
+        end_t = min(t + 1, self.T_step + 1)
+        ret = self.init_return(agent, *self.buffer.get(end_t))
+        for i in range(end_t - 1, tgt_t, -1):
+            ret += self.step_return(agent, *self.buffer.get(i), ret)
+        return ret
+    
+    @abstractmethod
+    def init_return(self, agent, s, a, r): pass
+    @abstractmethod
+    def step_return(self, agent, s, a, r, ret): pass
+
+
+class NStepSarsa(NStepAlgo):
+    def init_return(self, agent, s, a, r):
+        return r + self.gamma * agent.q(s, a)
+    
+    def step_return(self, agent, s, a, r, ret):
+        return r + self.gamma * ret
+
+
+class NStepQLearn(NStepAlgo):
+    def init_return(self, agent, s, a, r):
+        return r + self.gamma * agent.best_action(s)
+    
+    def step_return(self, agent, s, a, r, ret):
+        return r + self.gamma * ret
+
+
+class TreeLearn(NStepAlgo):
+    def init_return(self, agent, s, a, r):
+        return r + self.gamma * agent.best_action(s)
+    
+    def step_return(self, agent, s, a, r, ret):
+        best_a = agent.best_action(s)
+        if a == best_a:
+            return r + self.gamma * ret
+        else:
+            return r + self.gamma * agent.q(s, best_a)
