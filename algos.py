@@ -97,9 +97,8 @@ class NStepAlgo(Algo):
         if tgt_t < 0:
             return Command(no_update=True)
 
-        ret = self.alpha * (self.get_return(agent, t, tgt_t) - agent.q(tgt_s, tgt_a))
-
         tgt_s, tgt_a = self.buffer.get(tgt_t)[:2]
+        ret = self.alpha * (self.get_return(agent, t, tgt_t) - agent.q(tgt_s, tgt_a))
         terminate = tgt_t >= self.T_step
 
         return Command(ret, tgt_s, tgt_a, terminate)
@@ -108,7 +107,7 @@ class NStepAlgo(Algo):
         end_t = min(t + 1, self.T_step + 1)
         ret = self.init_return(agent, *self.buffer.get(end_t))
         for i in range(end_t - 1, tgt_t, -1):
-            ret += self.step_return(agent, *self.buffer.get(i), ret)
+            ret = self.step_return(agent, *self.buffer.get(i), ret)
         return ret
     
     @abstractmethod
