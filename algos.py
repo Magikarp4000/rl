@@ -27,44 +27,6 @@ class Algo(ABC):
     def init_episode(self, s, a): pass
 
 
-class Sarsa(Algo):
-    """
-    Parameters
-    ----------
-    alpha : float [0, 1]
-        Step-size.
-    gamma : float [0, 1]
-        Discount-rate.
-    """
-    def __init__(self, alpha=0.1, gamma=0.9):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-
-    def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal):
-        ret = self.alpha * (r + self.gamma * agent.q(new_s, new_a) - agent.q(s, a))
-        return Command(ret, s, a, is_terminal)
-
-
-class QLearn(Algo):
-    """
-    Parameters
-    ----------
-    alpha : float [0, 1]
-        Step-size.
-    gamma : float [0, 1]
-        Discount-rate.
-    """
-    def __init__(self, alpha=0.1, gamma=0.9):
-        self.alpha = alpha
-        self.gamma = gamma
-    
-    def __call__(self, agent: Agent , s, a, r, new_s, new_a, t, is_terminal):
-        best = agent.best_action_val(new_s)
-        ret = self.alpha * (r + self.gamma * best - agent.q(s, a))
-        return Command(ret, s, a, is_terminal)
-
-
 class NStepAlgo(Algo):
     """
     Base class for N-step algorithms.
@@ -122,7 +84,7 @@ class NStepAlgo(Algo):
     def step_return(self, agent, s, a, r, ret): pass
 
 
-class NStepSarsa(NStepAlgo):
+class Sarsa(NStepAlgo):
     def end_return(self, agent, s, a, r):
         return r + self.gamma * agent.q(s, a)
     
@@ -130,7 +92,7 @@ class NStepSarsa(NStepAlgo):
         return r + self.gamma * ret
 
 
-class NStepExpectedSarsa(NStepAlgo):
+class ExpectedSarsa(NStepAlgo):
     def end_return(self, agent, s, a, r):
         return r + self.gamma * sum([agent.action_prob(s, cur_a) * agent.q(s, cur_a)
                                      for cur_a in agent.env.action_spec(s)])
@@ -139,7 +101,7 @@ class NStepExpectedSarsa(NStepAlgo):
         return r + self.gamma * ret
 
 
-class NStepQLearn(NStepAlgo):
+class QLearn(NStepAlgo):
     def end_return(self, agent, s, a, r):
         return r + self.gamma * agent.best_action_val(s)
     
