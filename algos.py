@@ -187,5 +187,8 @@ class Dyna(Algo):
         for s, a in samp:
             new_s, r = self.model[(s, a)]
             new_a = agent.get_action(new_s)
-            cmd = self.model_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
-            agent.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
+            self.step_simulate(agent, s, a, r, new_s, new_a)
+    
+    def step_simulate(self, agent, s, a, r, new_s, new_a):
+        cmd = self.model_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
+        agent.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)

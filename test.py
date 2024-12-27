@@ -25,7 +25,7 @@ class TestEnv(envs.DiscreteEnv):
 
 
 agent = agents.Tabular(TestEnv())
-algo = algos.Dyna(algos.OnPolicyTreeLearn(alpha=0.1, gamma=1, nstep=5),
+algo = algos.Dyna(algos.TreeLearn(alpha=0.1, gamma=1, nstep=5),
                   algos.QLearn(), nsim=10)
 agent.train(algo, n=1000, batch_size=10)
 print(agent._q)
