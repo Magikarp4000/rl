@@ -10,7 +10,7 @@ from utils import Buffer
 
 class Algo(ABC):
     """Base class for algorithms."""
-    
+
     def get_params(self):
         args = inspect.getfullargspec(self.__init__)[0][1:]
         params = {'algo': self.name()} | {arg: getattr(self, arg) for arg in args}
@@ -75,13 +75,14 @@ class NStepAlgo(Algo):
     nstep : int [1, inf), default=5
         Number of steps used in bootstrapped updates.
     """
-    def __init__(self, alpha=0.1, gamma=0.9, nstep=5):
+    def __init__(self, alpha=0.1, gamma=0.9, nstep=1):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.nstep = nstep
 
         self.buffer = None
+        self.T_step = None
     
     def init_episode(self, s, a):
         self.buffer = Buffer(self.nstep + 1, (0, 0, 0))
@@ -92,7 +93,7 @@ class NStepAlgo(Algo):
         if self.T_step is np.inf and is_terminal:
             self.T_step = t
 
-        if t <= self.T_step:
+        if not is_terminal:
             self.buffer.set(t + 1, (new_s, new_a, r))
         
         tgt_t = t - self.nstep + 1
@@ -101,12 +102,12 @@ class NStepAlgo(Algo):
 
         tgt_s, tgt_a = self.buffer.get(tgt_t)[:2]
         ret = self.alpha * (self.get_return(agent, t, tgt_t) - agent.q(tgt_s, tgt_a))
-        terminate = tgt_t >= self.T_step
+        terminate = tgt_t >= self.T_step - 1
 
         return Command(ret, tgt_s, tgt_a, terminate)
 
     def get_return(self, agent: Agent, t, tgt_t):
-        end_t = min(t + 1, self.T_step + 1)
+        end_t = min(t + 1, self.T_step)
         ret = self.end_return(agent, *self.buffer.get(end_t))
         for i in range(end_t - 1, tgt_t, -1):
             ret = self.step_return(agent, *self.buffer.get(i), ret)
@@ -221,13 +222,19 @@ class ExploreBonus(Algo):
         self.algo = algo
         self.kappa = kappa
         
-        self.last_visit = None
+        self._last_visit = None
 
     def init_episode(self, s, a):
-        self.last_visit = {}
+        self.algo.init_episode(s, a)
+        self._last_visit = {}
     
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
-        if t <= self.T_step:
-            r += self.kappa * np.sqrt(t - self.last_visit[(s, a)])
-            self.last_visit[(s, a)] = t
+        if not is_terminal:
+            r += self.kappa * np.sqrt(t - self.last_visit(s, a))
+            self._last_visit[(s, a)] = t
         return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+
+    def last_visit(self, s, a):
+        if (s, a) not in self._last_visit:
+            return 0
+        return self._last_visit[(s, a)]

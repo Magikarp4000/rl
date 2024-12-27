@@ -74,12 +74,12 @@ class Agent(ABC):
         episode_steps = 0
 
         while not cmd.terminate:
+            if s == self.env.T:
+                is_terminal = True
+                episode_steps = steps
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps)
-                if new_s == self.env.T:
-                    is_terminal = True
-                    episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if not cmd.no_update:
                 self.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)

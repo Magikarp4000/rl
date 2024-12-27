@@ -1,7 +1,7 @@
 import random
 
 import agents
-import algos
+from algos import *
 import envs
 
 
@@ -25,8 +25,7 @@ class TestEnv(envs.DiscreteEnv):
 
 
 agent = agents.Tabular(TestEnv())
-algo = algos.Dyna(algos.TreeLearn(alpha=0.1, gamma=1, nstep=5),
-                  algos.QLearn(), nsim=10)
+algo = ExploreBonus(TreeLearn(nstep=5))
 agent.train(algo, n=1000, batch_size=10)
 print(agent._q)
 # agent.save('v0.2b', 'testenv')
