@@ -155,26 +155,25 @@ class OnPolicyTreeLearn(NStepAlgo):
         return r + self.gamma * agent.best_action_val(s)
     
     def step_return(self, agent, s, a, r, ret):
-        best_a = agent.best_action(s)
-        tmp = sum([agent.action_prob(s, cur_a) * (ret if cur_a == best_a else agent.q(s, cur_a))
+        tmp = sum([agent.action_prob(s, cur_a) * (ret if cur_a == a else agent.q(s, cur_a))
                    for cur_a in agent.env.action_spec(s)])
         return r + self.gamma * tmp
 
 
 class Dyna(Algo):
-    def __init__(self, algo: Algo, model_algo: Algo, nsim):
+    def __init__(self, core_algo: Algo, model_algo: Algo, nsim):
         super().__init__()
-        self.algo = algo
+        self.core_algo = core_algo
         self.model_algo = model_algo
         self.nsim = nsim
         self.model = {}
 
     def init_episode(self, s, a):
-        self.algo.init_episode(s, a)
+        self.core_algo.init_episode(s, a)
         self.model_algo.init_episode(s, a)
 
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
-        ret = self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+        ret = self.core_algo(agent, s, a, r, new_s, new_a, t, is_terminal)
         if not is_terminal:
             self.update(s, a, r, new_s, new_a)
             self.simulate(agent)
