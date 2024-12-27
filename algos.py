@@ -8,14 +8,13 @@ from utils import Buffer
 
 
 class Algo(ABC):
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
-
     def get_params(self):
         args = inspect.getfullargspec(self.__init__)[0][1:]
-        params = {'algo': self.name} | {arg: getattr(self, arg) for arg in args}
+        params = {'algo': self.name()} | {arg: getattr(self, arg) for arg in args}
         return params
+
+    def name(self):
+        return type(self).__name__.lower()
 
     @abstractmethod
     def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal): pass
@@ -32,7 +31,7 @@ class Sarsa(Algo):
         Discount-rate.
     """
     def __init__(self, alpha=0.1, gamma=0.9):
-        super().__init__('sarsa')
+        super().__init__()
         self.alpha = alpha
         self.gamma = gamma
 
@@ -51,7 +50,6 @@ class QLearn(Algo):
         Discount-rate.
     """
     def __init__(self, alpha=0.1, gamma=0.9):
-        super().__init__('qlearn')
         self.alpha = alpha
         self.gamma = gamma
     
@@ -73,7 +71,6 @@ class NStepAlgo(Algo):
         Number of bootstrapped steps used in updates.
     """
     def __init__(self, alpha=0.1, gamma=0.9, nstep=5):
-        super().__init__('nstepsarsa')
         self.alpha = alpha
         self.gamma = gamma
         self.nstep = nstep

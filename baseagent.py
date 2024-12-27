@@ -21,10 +21,9 @@ class Command:
 
 
 class Agent(ABC):
-    def __init__(self, env: Env, name: str, config=[]):
+    def __init__(self, env: Env, config=[]):
         super().__init__()
         self.env = env
-        self.name = name
 
         self.algo = None
         self.eps = None
@@ -40,7 +39,7 @@ class Agent(ABC):
         try:
             train_args = inspect.getfullargspec(self.train)[0][2: 5]
             algo_args = self.algo.get_params()
-            self._config_meta({"approximator": self.name})
+            self._config_meta({"approximator": self.name()})
             self._config_meta(algo_args)
             self._config_meta({name: val for name, val in zip(train_args, args)})
             self._config_meta(kwargs)
@@ -150,6 +149,9 @@ class Agent(ABC):
         model_path = f"{path}/{model_name}.json"
         env_path = f"{path}/env.json"
         return model_path, env_path
+    
+    def name(self):
+        return type(self).__name__.lower()
 
     def get_action(self, s, eps=0):
         if s == self.env.T:
