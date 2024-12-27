@@ -53,12 +53,16 @@ class Agent(ABC):
         self.cache_idx = 0
         while ep < n:
             start_time = time.time()
-            for _ in range(batch_size):
+            start_ep = ep
+            while ep < min(n, start_ep + batch_size):
                 steps = self._train_episode(expstart)
                 steps_list.append(steps)
                 ep += 1
             end_time = time.time()
-            print(f"Episodes {ep - batch_size} - {ep} complete in {round(end_time - start_time, 2)}s.")
+            if batch_size == 1:
+                print(f"Episode {ep} complete in {round(end_time - start_time, 3)}s.")
+            else:
+                print(f"Episodes {start_ep + 1} - {ep} complete in {round(end_time - start_time, 3)}s.")
         graph(steps_list, 'Episode', 'Num steps')
 
     def _train_episode(self, expstart):

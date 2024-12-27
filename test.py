@@ -31,6 +31,6 @@ class TestEnv(envs.DiscreteEnv):
 
 agent = agents.Tabular(TestEnv())
 # agent.load('v0.1b', 'testenv')
-agent.train(algos.OnPolicyTreeLearn(alpha=0.1, gamma=1, nstep=5), n=1000, batch_size=10)
+agent.train(algos.OnPolicyTreeLearn(alpha=0.1, gamma=1, nstep=5), n=1006, batch_size=2)
 print(agent._q)
 # agent.save('v0.1b', 'testenv')
