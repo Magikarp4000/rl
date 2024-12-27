@@ -9,6 +9,8 @@ from utils import Buffer
 
 
 class Algo(ABC):
+    """Base class for algorithms."""
+    
     def get_params(self):
         args = inspect.getfullargspec(self.__init__)[0][1:]
         params = {'algo': self.name()} | {arg: getattr(self, arg) for arg in args}
@@ -26,9 +28,9 @@ class Sarsa(Algo):
     """
     Parameters
     ----------
-    alpha : float [0, 1], default=0.1
+    alpha : float [0, 1]
         Step-size.
-    gamma : float [0, 1], default=0.9
+    gamma : float [0, 1]
         Discount-rate.
     """
     def __init__(self, alpha=0.1, gamma=0.9):
@@ -45,9 +47,9 @@ class QLearn(Algo):
     """
     Parameters
     ----------
-    alpha : float [0, 1], default=0.1
+    alpha : float [0, 1]
         Step-size.
-    gamma : float [0, 1], default=0.9
+    gamma : float [0, 1]
         Discount-rate.
     """
     def __init__(self, alpha=0.1, gamma=0.9):
@@ -62,14 +64,16 @@ class QLearn(Algo):
 
 class NStepAlgo(Algo):
     """
+    Base class for N-step algorithms.
+
     Parameters
     ----------
-    alpha : float [0, 1], default=0.1
+    alpha : float [0, 1]
         Step-size.
-    gamma : float [0, 1], default=0.9
+    gamma : float [0, 1]
         Discount-rate.
     nstep : int [1, inf), default=5
-        Number of bootstrapped steps used in updates.
+        Number of steps used in bootstrapped updates.
     """
     def __init__(self, alpha=0.1, gamma=0.9, nstep=5):
         super().__init__()
@@ -77,11 +81,10 @@ class NStepAlgo(Algo):
         self.gamma = gamma
         self.nstep = nstep
 
-        self.buffer = Buffer(nstep + 1, (0, 0, 0))
-        self.T_step = None
+        self.buffer = None
     
     def init_episode(self, s, a):
-        self.buffer.reset()
+        self.buffer = Buffer(self.nstep + 1, (0, 0, 0))
         self.buffer.set(0, (s, a, 0))
         self.T_step = np.inf
 
@@ -161,16 +164,26 @@ class OnPolicyTreeLearn(NStepAlgo):
 
 
 class Dyna(Algo):
-    def __init__(self, core_algo: Algo, model_algo: Algo, nsim):
+    """
+    Parameters
+    ----------
+    core_algo : Algo
+        Algorithm used for direct RL.
+    plan_algo : Algo
+        Algorithm used for planning.
+    nsim: int [1, inf)
+        Number of steps per planning simulation.
+    """
+    def __init__(self, core_algo: Algo, plan_algo: Algo, nsim):
         super().__init__()
         self.core_algo = core_algo
-        self.model_algo = model_algo
+        self.plan_algo = plan_algo
         self.nsim = nsim
         self.model = {}
 
     def init_episode(self, s, a):
         self.core_algo.init_episode(s, a)
-        self.model_algo.init_episode(s, a)
+        self.plan_algo.init_episode(s, a)
 
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
         ret = self.core_algo(agent, s, a, r, new_s, new_a, t, is_terminal)
@@ -190,5 +203,31 @@ class Dyna(Algo):
             self.step_simulate(agent, s, a, r, new_s, new_a)
     
     def step_simulate(self, agent, s, a, r, new_s, new_a):
-        cmd = self.model_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
+        cmd = self.plan_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
         agent.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
+
+
+class ExploreBonus(Algo):
+    """
+    Parameters
+    ----------
+    algo : Algo
+        Core algorithm.
+    kappa : float [0, 1]
+        Exploration bonus.
+    """
+    def __init__(self, algo: Algo, kappa=0.05):
+        super().__init__()
+        self.algo = algo
+        self.kappa = kappa
+        
+        self.last_visit = None
+
+    def init_episode(self, s, a):
+        self.last_visit = {}
+    
+    def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
+        if t <= self.T_step:
+            r += self.kappa * np.sqrt(t - self.last_visit[(s, a)])
+            self.last_visit[(s, a)] = t
+        return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
