@@ -24,13 +24,9 @@ class TestEnv(envs.DiscreteEnv):
         return new_s, r
 
 
-# agent = agents.Tabular(algos.Sarsa(), TestEnv())
-# agent.load(file_name='modeltest', env_name='envtest')
-# print(agent.env.actions)
-# print(agent._q)
-
 agent = agents.Tabular(TestEnv())
-# agent.load('v0.1b', 'testenv')
-agent.train(algos.OnPolicyTreeLearn(alpha=0.1, gamma=1, nstep=5), n=1006, batch_size=2)
+algo = algos.Dyna(algos.OnPolicyTreeLearn(alpha=0.1, gamma=1, nstep=5),
+                  algos.QLearn(), nsim=10)
+agent.train(algo, n=1000, batch_size=10)
 print(agent._q)
 # agent.save('v0.2b', 'testenv')

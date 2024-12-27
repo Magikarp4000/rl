@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import inspect
+import random
 
 import numpy as np
 
@@ -71,6 +72,7 @@ class NStepAlgo(Algo):
         Number of bootstrapped steps used in updates.
     """
     def __init__(self, alpha=0.1, gamma=0.9, nstep=5):
+        super().__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.nstep = nstep
@@ -157,3 +159,34 @@ class OnPolicyTreeLearn(NStepAlgo):
         tmp = sum([agent.action_prob(s, cur_a) * (ret if cur_a == best_a else agent.q(s, cur_a))
                    for cur_a in agent.env.action_spec(s)])
         return r + self.gamma * tmp
+
+
+class Dyna(Algo):
+    def __init__(self, algo: Algo, model_algo: Algo, nsim):
+        super().__init__()
+        self.algo = algo
+        self.model_algo = model_algo
+        self.nsim = nsim
+        self.model = {}
+
+    def init_episode(self, s, a):
+        self.algo.init_episode(s, a)
+        self.model_algo.init_episode(s, a)
+
+    def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
+        ret = self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+        if not is_terminal:
+            self.update(s, a, r, new_s, new_a)
+            self.simulate(agent)
+        return ret
+    
+    def update(self, s, a, r, new_s, new_a):
+        self.model[(s, a)] = (new_s, r)
+
+    def simulate(self, agent):
+        samp = random.choices(list(self.model.keys()), k=self.nsim)
+        for s, a in samp:
+            new_s, r = self.model[(s, a)]
+            new_a = agent.get_action(new_s)
+            cmd = self.model_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
+            agent.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
