@@ -5,7 +5,7 @@ import random
 import numpy as np
 
 from baseagent import Agent, Command
-from utils import Buffer
+from utils import Buffer, name
 
 
 class Algo(ABC):
@@ -13,11 +13,14 @@ class Algo(ABC):
 
     def get_params(self):
         args = inspect.getfullargspec(self.__init__)[0][1:]
-        params = {'algo': self.name()} | {arg: getattr(self, arg) for arg in args}
+        params = {'name': name(self)} | {arg: self._get_val(arg) for arg in args}
         return params
-
-    def name(self):
-        return type(self).__name__.lower()
+    
+    def _get_val(self, arg):
+        val = getattr(self, arg)
+        if isinstance(val, Algo):
+            return val.get_params()
+        return val
 
     @abstractmethod
     def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal): pass
@@ -168,26 +171,26 @@ class Dyna(Algo):
     """
     Parameters
     ----------
-    core_algo : Algo
+    algo : Algo
         Algorithm used for direct RL.
     plan_algo : Algo
         Algorithm used for planning.
     nsim: int [1, inf)
         Number of steps per planning simulation.
     """
-    def __init__(self, core_algo: Algo, plan_algo: Algo, nsim):
+    def __init__(self, algo: Algo, plan_algo: Algo, nsim=1):
         super().__init__()
-        self.core_algo = core_algo
+        self.algo = algo
         self.plan_algo = plan_algo
         self.nsim = nsim
         self.model = {}
 
     def init_episode(self, s, a):
-        self.core_algo.init_episode(s, a)
+        self.algo.init_episode(s, a)
         self.plan_algo.init_episode(s, a)
 
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
-        ret = self.core_algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+        ret = self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
         if not is_terminal:
             self.update(s, a, r, new_s, new_a)
             self.simulate(agent)

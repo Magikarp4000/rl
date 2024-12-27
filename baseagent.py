@@ -6,7 +6,7 @@ import inspect
 
 import numpy as np
 
-from utils import graph, get_dir, random_argmax
+from utils import graph, get_dir, random_argmax, name
 import data_transfer
 from envs import Env
 
@@ -39,8 +39,8 @@ class Agent(ABC):
         try:
             train_args = inspect.getfullargspec(self.train)[0][2: 5]
             algo_args = self.algo.get_params()
-            self._config_meta({"approximator": self.name()})
-            self._config_meta(algo_args)
+            self._config_meta({'approximator': name(self)})
+            self._config_meta({'algo': algo_args})
             self._config_meta({name: val for name, val in zip(train_args, args)})
             self._config_meta(kwargs)
         except IndexError:
@@ -149,9 +149,6 @@ class Agent(ABC):
         model_path = f"{path}/{model_name}.json"
         env_path = f"{path}/env.json"
         return model_path, env_path
-    
-    def name(self):
-        return type(self).__name__.lower()
 
     def get_action(self, s, eps=0):
         if s == self.env.T:

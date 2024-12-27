@@ -103,3 +103,6 @@ def graph(y, xlabel=None, ylabel=None):
     pl.ylabel(ylabel)
     pl.plot(np.arange(len(y)), y)
     pl.show()
+
+def name(obj):
+    return type(obj).__name__.lower()

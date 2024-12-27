@@ -25,7 +25,7 @@ class TestEnv(envs.DiscreteEnv):
 
 
 agent = agents.Tabular(TestEnv())
-algo = ExploreBonus(TreeLearn(nstep=5))
+algo = Dyna(ExploreBonus(TreeLearn(nstep=5)), QLearn(), nsim=5)
 agent.train(algo, n=1000, batch_size=10)
 print(agent._q)
-# agent.save('v0.2b', 'testenv')
+agent.save('v0.4b', 'testenv')
