@@ -106,30 +106,65 @@ class Dyna(Algo):
 
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
         if not is_terminal:
-            self.model[(s, a)] = (new_s, r)
+            self.update(agent, s, a, new_s, new_a, r)
             self.simulate(agent)
         return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+
+    def update(self, agent, s, a, new_s, new_a, r):
+        self.model[(s, a)] = (new_s, r)
 
     def simulate(self, agent):
         samp = random.choices(list(self.model.keys()), k=self.nsim)
         for s, a in samp:
-            new_s, r = self.model[(s, a)]
-            new_a = agent.get_action(new_s)
-            ret = self.plan_algo.end_return(agent, new_s, new_a, r)
-            agent.update(ret, s, a)
+            self.step_sim(agent, s, a)
+    
+    def step_sim(self, agent, s, a):
+        new_s, r = self.model[(s, a)]
+        new_a = agent.get_action(new_s)
+        ret = self.plan_algo.end_return(agent, new_s, new_a, r)
+        agent.update(ret, s, a)
 
 
-class PrioritizedSweeping(Dyna):
+class PrioritizedSweep(Dyna):
+    """
+    Parameters
+    ----------
+    theta : float [0, 1]
+        Threshold for change in q-value
+    """
     def __init__(self, algo, plan_algo, nsim=1, theta=0.05):
         super().__init__(algo, plan_algo, nsim)
         self.theta = theta
-
-        self.pq = None
-    
-    def init_episode(self, s, a):
-        super().init_episode(s, a)
         self.pq = []
         heapq.heapify(self.pq)
+        self.rev_model = {}
+    
+    def update(self, agent, s, a, new_s, new_a, r):
+        if (s, a) in self.model:
+            old_new_s, _ = self.model[(s, a)]
+            self.rev_model[old_new_s].remove((s, a))
+        if new_s not in self.rev_model:
+            self.rev_model[new_s] = set([(s, a)])
+        else:
+            self.rev_model[new_s].add((s, a))
+        self.update_pq(agent, s, a, new_s, new_a, r)
+        super().update(agent, s, a, new_s, new_a, r)
+    
+    def simulate(self, agent):
+        for _ in range(self.nsim):
+            if not self.pq:
+                break
+            s, a = heapq.heappop(self.pq)
+            self.step_sim(agent, s, a)
+            if s in self.rev_model:
+                for prev_s, prev_a in self.rev_model[s]:
+                    _, r = self.model[(prev_s, prev_a)]
+                    self.update_pq(agent, prev_s, prev_a, s, a, r)
+    
+    def update_pq(self, agent, s, a, new_s, new_a, r):
+        ret = self.plan_algo.end_return(agent, new_s, new_a, r)
+        if abs(ret - agent.q(s, a)) > self.theta:
+            heapq.heappush(self.pq, (s, a))
 
 
 class ExploreBonus(Algo):
