@@ -12,8 +12,8 @@ from envs import Env
 
 
 class Command:
-    def __init__(self, diff=None, tgt_s=None, tgt_a=None, terminate=False, no_update=False):
-        self.diff = diff
+    def __init__(self, tgt=None, tgt_s=None, tgt_a=None, terminate=False, no_update=False):
+        self.tgt = tgt
         self.tgt_s = tgt_s
         self.tgt_a = tgt_a
         self.terminate = terminate
@@ -21,11 +21,11 @@ class Command:
 
 
 class Agent(ABC):
-    def __init__(self, env: Env, config=[]):
+    def __init__(self, env: Env, algo, config=[]):
         super().__init__()
         self.env = env
+        self.algo = algo
 
-        self.algo = None
         self.eps = None
 
         self._config = config
@@ -74,15 +74,15 @@ class Agent(ABC):
         episode_steps = 0
 
         while not cmd.terminate:
-            if s == self.env.T:
-                is_terminal = True
-                episode_steps = steps
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps)
+                if new_s == self.env.T:
+                    is_terminal = True
+                    episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if not cmd.no_update:
-                self.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
+                self.update(cmd.tgt, cmd.tgt_s, cmd.tgt_a)
             s, a = new_s, new_a
             steps += 1
         return episode_steps
@@ -200,8 +200,7 @@ class Agent(ABC):
             self._save_model(model_path)
             print(f'Saved model {model_name}!')
     
-    def train(self, algo, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
-        self.algo = algo
+    def train(self, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
         self.eps = eps
         
         if save_params:
@@ -225,4 +224,4 @@ class Agent(ABC):
     def q(self, s, a): pass
     def q_prime(self, s, a): pass
     @abstractmethod
-    def update(self, diff, tgt_s, tgt_a): pass
+    def update(self, tgt, tgt_s, tgt_a): pass

@@ -1,6 +1,6 @@
 import random
 
-import agents
+from agents import Tabular
 from algos import *
 import envs
 
@@ -24,8 +24,12 @@ class TestEnv(envs.DiscreteEnv):
         return new_s, r
 
 
-agent = agents.Tabular(TestEnv())
-algo = Dyna(ExploreBonus(TreeLearn(nstep=5)), QLearn(), nsim=5)
-agent.train(algo, n=1000, batch_size=10)
+env = TestEnv()
+algo = Dyna(ExploreBonus(TreeLearn(gamma=0.9, nstep=5)), plan_algo=QLearn(), nsim=5)
+algo = TreeLearn(gamma=0.9, nstep=1)
+
+agent = Tabular(env, algo, alpha=0.1)
+agent.train(n=1000, batch_size=10)
+
 print(agent._q)
-agent.save('v0.4b', 'testenv')
+# agent.save('v0.4b', 'testenv')

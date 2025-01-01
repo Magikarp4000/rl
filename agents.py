@@ -1,17 +1,19 @@
 import random
 
-import baseagent
-import envs
+from baseagent import Agent
+from envs import DiscreteEnv
 import utils
 
 from tilecoding import TileCoding
 from network import Network
 
 
-class Tabular(baseagent.Agent):
-    def __init__(self, env: envs.DiscreteEnv):
-        super().__init__(env, ['_q'])
-        self._q = []
+class Tabular(Agent):
+    def __init__(self, env: DiscreteEnv, algo, alpha=0.1):
+        super().__init__(env, algo, ['_q'])
+        self.alpha = alpha
+        
+        self._q = None
         if env is not None:
             self._q = utils.fit_shape(0, env.actions)
 
@@ -20,16 +22,16 @@ class Tabular(baseagent.Agent):
             return self.env.T_val
         return self._q[s][a]
     
-    def update(self, diff, tgt_s, tgt_a):
-        self._q[tgt_s][tgt_a] += diff
+    def update(self, tgt, tgt_s, tgt_a):
+        self._q[tgt_s][tgt_a] += self.alpha * (tgt - self.q(tgt_s, tgt_a))
 
 
 ## ----------- BELOW NOT FINISHED -----------
-class TileCode(baseagent.Agent):
+class TileCode(Agent):
     pass
 
 
-class NN(baseagent.Agent):
+class NN(Agent):
     def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0):
         super().__init__(base_actions, bounds, start_bounds, dim)
         self.cache = []

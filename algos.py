@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import inspect
 import random
+import heapq
 
 import numpy as np
 
@@ -33,16 +34,13 @@ class NStepAlgo(Algo):
 
     Parameters
     ----------
-    alpha : float [0, 1]
-        Step-size.
     gamma : float [0, 1]
         Discount-rate.
     nstep : int [1, inf), default=5
         Number of steps used in bootstrapped updates.
     """
-    def __init__(self, alpha=0.1, gamma=0.9, nstep=1):
+    def __init__(self, gamma=0.9, nstep=1):
         super().__init__()
-        self.alpha = alpha
         self.gamma = gamma
         self.nstep = nstep
 
@@ -50,15 +48,15 @@ class NStepAlgo(Algo):
         self.T_step = None
     
     def init_episode(self, s, a):
-        self.buffer = Buffer(self.nstep + 1, (0, 0, 0))
+        self.buffer = Buffer(self.nstep + 1, (None, None, None))  # (s, a, r)
         self.buffer.set(0, (s, a, 0))
         self.T_step = np.inf
 
     def __call__(self, agent: Agent, s, a, r, new_s, new_a, t, is_terminal):
         if self.T_step is np.inf and is_terminal:
-            self.T_step = t
+            self.T_step = t + 1
 
-        if not is_terminal:
+        if t < self.T_step:
             self.buffer.set(t + 1, (new_s, new_a, r))
         
         tgt_t = t - self.nstep + 1
@@ -66,7 +64,7 @@ class NStepAlgo(Algo):
             return Command(no_update=True)
 
         tgt_s, tgt_a = self.buffer.get(tgt_t)[:2]
-        ret = self.alpha * (self.get_return(agent, t, tgt_t) - agent.q(tgt_s, tgt_a))
+        ret = self.get_return(agent, t, tgt_t)
         terminate = tgt_t >= self.T_step - 1
 
         return Command(ret, tgt_s, tgt_a, terminate)
@@ -82,6 +80,94 @@ class NStepAlgo(Algo):
     def end_return(self, agent, s, a, r): pass
     @abstractmethod
     def step_return(self, agent, s, a, r, ret): pass
+
+
+class Dyna(Algo):
+    """
+    Parameters
+    ----------
+    algo : Algo
+        Algorithm used for direct RL.
+    plan_algo : Algo
+        Algorithm used for planning.
+    nsim: int [1, inf)
+        Number of steps per planning simulation.
+    """
+    def __init__(self, algo: Algo, plan_algo: Algo, nsim=1):
+        super().__init__()
+        self.algo = algo
+        self.plan_algo = plan_algo
+        self.nsim = nsim
+        self.model = {}
+
+    def init_episode(self, s, a):
+        self.algo.init_episode(s, a)
+        self.plan_algo.init_episode(s, a)
+
+    def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
+        if not is_terminal:
+            self.update_model(s, a, r, new_s, new_a)
+            self.simulate(agent)
+        return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+    
+    def update_model(self, s, a, r, new_s, new_a):
+        self.model[(s, a)] = (new_s, r)
+
+    def simulate(self, agent):
+        samp = random.choices(list(self.model.keys()), k=self.nsim)
+        for s, a in samp:
+            new_s, r = self.model[(s, a)]
+            new_a = agent.get_action(new_s)
+            self.step_simulate(agent, s, a, r, new_s, new_a)
+    
+    def step_simulate(self, agent, s, a, r, new_s, new_a):
+        cmd = self.plan_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
+        agent.update(cmd.tgt, cmd.tgt_s, cmd.tgt_a)
+
+
+class PrioritizedSweeping(Dyna):
+    def __init__(self, algo, plan_algo, nsim=1, theta=0.05):
+        super().__init__(algo, plan_algo, nsim)
+        self.theta = theta
+
+        self.pq = None
+    
+    def init_episode(self, s, a):
+        super().init_episode(s, a)
+        self.pq = []
+        heapq.heapify(self.pq)
+
+
+class ExploreBonus(Algo):
+    """
+    Parameters
+    ----------
+    algo : Algo
+        Core algorithm.
+    kappa : float [0, 1]
+        Exploration bonus.
+    """
+    def __init__(self, algo: Algo, kappa=0.05):
+        super().__init__()
+        self.algo = algo
+        self.kappa = kappa
+        
+        self._last_visit = None
+
+    def init_episode(self, s, a):
+        self.algo.init_episode(s, a)
+        self._last_visit = {}
+    
+    def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
+        if not is_terminal:
+            r += self.kappa * np.sqrt(t - self.last_visit(s, a))
+            self._last_visit[(s, a)] = t
+        return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
+
+    def last_visit(self, s, a):
+        if (s, a) not in self._last_visit:
+            return 0
+        return self._last_visit[(s, a)]
 
 
 class Sarsa(NStepAlgo):
@@ -127,79 +213,3 @@ class OnPolicyTreeLearn(NStepAlgo):
         tmp = sum([agent.action_prob(s, cur_a) * (ret if cur_a == a else agent.q(s, cur_a))
                    for cur_a in agent.env.action_spec(s)])
         return r + self.gamma * tmp
-
-
-class Dyna(Algo):
-    """
-    Parameters
-    ----------
-    algo : Algo
-        Algorithm used for direct RL.
-    plan_algo : Algo
-        Algorithm used for planning.
-    nsim: int [1, inf)
-        Number of steps per planning simulation.
-    """
-    def __init__(self, algo: Algo, plan_algo: Algo, nsim=1):
-        super().__init__()
-        self.algo = algo
-        self.plan_algo = plan_algo
-        self.nsim = nsim
-        self.model = {}
-
-    def init_episode(self, s, a):
-        self.algo.init_episode(s, a)
-        self.plan_algo.init_episode(s, a)
-
-    def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
-        ret = self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
-        if not is_terminal:
-            self.update(s, a, r, new_s, new_a)
-            self.simulate(agent)
-        return ret
-    
-    def update(self, s, a, r, new_s, new_a):
-        self.model[(s, a)] = (new_s, r)
-
-    def simulate(self, agent):
-        samp = random.choices(list(self.model.keys()), k=self.nsim)
-        for s, a in samp:
-            new_s, r = self.model[(s, a)]
-            new_a = agent.get_action(new_s)
-            self.step_simulate(agent, s, a, r, new_s, new_a)
-    
-    def step_simulate(self, agent, s, a, r, new_s, new_a):
-        cmd = self.plan_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
-        agent.update(cmd.diff, cmd.tgt_s, cmd.tgt_a)
-
-
-class ExploreBonus(Algo):
-    """
-    Parameters
-    ----------
-    algo : Algo
-        Core algorithm.
-    kappa : float [0, 1]
-        Exploration bonus.
-    """
-    def __init__(self, algo: Algo, kappa=0.05):
-        super().__init__()
-        self.algo = algo
-        self.kappa = kappa
-        
-        self._last_visit = None
-
-    def init_episode(self, s, a):
-        self.algo.init_episode(s, a)
-        self._last_visit = {}
-    
-    def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
-        if not is_terminal:
-            r += self.kappa * np.sqrt(t - self.last_visit(s, a))
-            self._last_visit[(s, a)] = t
-        return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
-
-    def last_visit(self, s, a):
-        if (s, a) not in self._last_visit:
-            return 0
-        return self._last_visit[(s, a)]
