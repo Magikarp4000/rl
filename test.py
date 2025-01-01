@@ -25,8 +25,8 @@ class TestEnv(envs.DiscreteEnv):
 
 
 env = TestEnv()
-algo = Dyna(ExploreBonus(TreeLearn(gamma=0.9, nstep=5)), plan_algo=QLearn(), nsim=5)
-algo = TreeLearn(gamma=0.9, nstep=1)
+algo = Dyna(ExploreBonus(TreeLearn(gamma=0.9, nstep=5), kappa=0), plan_algo=QLearn(), nsim=5)
+# algo = TreeLearn(gamma=0.9, nstep=1)
 
 agent = Tabular(env, algo, alpha=0.1)
 agent.train(n=1000, batch_size=10)

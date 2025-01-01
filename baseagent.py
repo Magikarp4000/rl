@@ -12,12 +12,12 @@ from envs import Env
 
 
 class Command:
-    def __init__(self, tgt=None, tgt_s=None, tgt_a=None, terminate=False, no_update=False):
+    def __init__(self, tgt=None, tgt_s=None, tgt_a=None, terminate=False, update=True):
         self.tgt = tgt
         self.tgt_s = tgt_s
         self.tgt_a = tgt_a
         self.terminate = terminate
-        self.no_update = no_update
+        self.update = update
 
 
 class Agent(ABC):
@@ -81,7 +81,7 @@ class Agent(ABC):
                     is_terminal = True
                     episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
-            if not cmd.no_update:
+            if cmd.update:
                 self.update(cmd.tgt, cmd.tgt_s, cmd.tgt_a)
             s, a = new_s, new_a
             steps += 1

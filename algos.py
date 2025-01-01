@@ -61,7 +61,7 @@ class NStepAlgo(Algo):
         
         tgt_t = t - self.nstep + 1
         if tgt_t < 0:
-            return Command(no_update=True)
+            return Command(update=False)
 
         tgt_s, tgt_a = self.buffer.get(tgt_t)[:2]
         ret = self.get_return(agent, t, tgt_t)
@@ -106,23 +106,17 @@ class Dyna(Algo):
 
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
         if not is_terminal:
-            self.update_model(s, a, r, new_s, new_a)
+            self.model[(s, a)] = (new_s, r)
             self.simulate(agent)
         return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
-    
-    def update_model(self, s, a, r, new_s, new_a):
-        self.model[(s, a)] = (new_s, r)
 
     def simulate(self, agent):
         samp = random.choices(list(self.model.keys()), k=self.nsim)
         for s, a in samp:
             new_s, r = self.model[(s, a)]
             new_a = agent.get_action(new_s)
-            self.step_simulate(agent, s, a, r, new_s, new_a)
-    
-    def step_simulate(self, agent, s, a, r, new_s, new_a):
-        cmd = self.plan_algo(agent, s, a, r, new_s, new_a, t=0, is_terminal=False)
-        agent.update(cmd.tgt, cmd.tgt_s, cmd.tgt_a)
+            ret = self.plan_algo.end_return(agent, new_s, new_a, r)
+            agent.update(ret, s, a)
 
 
 class PrioritizedSweeping(Dyna):
