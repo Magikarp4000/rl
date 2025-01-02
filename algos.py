@@ -130,7 +130,7 @@ class PrioritizedSweep(Dyna):
     Parameters
     ----------
     theta : float [0, 1]
-        Threshold for change in q-value
+        Threshold for change in q-value.
     """
     def __init__(self, algo, plan_algo, nsim=1, theta=0.05):
         super().__init__(algo, plan_algo, nsim)

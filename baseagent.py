@@ -12,10 +12,10 @@ from envs import Env
 
 
 class Command:
-    def __init__(self, tgt=None, tgt_s=None, tgt_a=None, terminate=False, update=True):
+    def __init__(self, tgt=None, s=None, a=None, terminate=False, update=True):
         self.tgt = tgt
-        self.tgt_s = tgt_s
-        self.tgt_a = tgt_a
+        self.s = s
+        self.a = a
         self.terminate = terminate
         self.update = update
 
@@ -82,7 +82,7 @@ class Agent(ABC):
                     episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if cmd.update:
-                self.update(cmd.tgt, cmd.tgt_s, cmd.tgt_a)
+                self.update(cmd.tgt, cmd.s, cmd.a)
             s, a = new_s, new_a
             steps += 1
         return episode_steps
@@ -224,4 +224,4 @@ class Agent(ABC):
     def q(self, s, a): pass
     def q_prime(self, s, a): pass
     @abstractmethod
-    def update(self, tgt, tgt_s, tgt_a): pass
+    def update(self, tgt, s, a): pass

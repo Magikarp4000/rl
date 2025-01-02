@@ -1,5 +1,7 @@
 import random
 
+import numpy as np
+
 from baseagent import Agent
 from envs import DiscreteEnv
 import utils
@@ -22,8 +24,8 @@ class Tabular(Agent):
             return self.env.T_val
         return self._q[s][a]
     
-    def update(self, tgt, tgt_s, tgt_a):
-        self._q[tgt_s][tgt_a] += self.alpha * (tgt - self.q(tgt_s, tgt_a))
+    def update(self, tgt, s, a):
+        self._q[s][a] += self.alpha * (tgt - self.q(s, a))
 
 
 ## ----------- BELOW NOT FINISHED -----------
@@ -32,6 +34,31 @@ class TileCode(Agent):
 
 
 class NN(Agent):
+    def __init__(self, env, algo, nn: Network):
+        super().__init__(env, algo, ['nn'])
+        self.nn = nn
+    
+    def q(self, s, a):
+        if s == self.env.T:
+            return self.env.T_val
+        state = self.to_state(s)
+        return self.nn.feedforward(state).flat[a]
+    
+    def update(self, tgt, s, a):
+        x = self.to_state(s)
+        y = self.nn.feedforward(x)
+        y.flat[a] = tgt
+        # print(y)
+        self.nn.train(train_data=[(x, y)], epochs=10, mini_batch_size=1, eta=0.1)
+    
+    def to_state(self, s):
+        return self.column(self.env.states[s])
+
+    def column(self, vec):
+        return np.reshape(vec, (len(vec), 1))
+
+
+class DeprecatedNN(Agent):
     def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0):
         super().__init__(base_actions, bounds, start_bounds, dim)
         self.cache = []

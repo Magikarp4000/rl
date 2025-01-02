@@ -7,8 +7,8 @@ class Network(object):
         self.sizes = sizes
         self.num_layers = len(sizes)
         self.cost_type = cost_type.lower()
-        self.biases = [np.random.randn(i, 1) for i in sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
-        self.weights = [np.random.randn(i, j) for j, i in zip(sizes[:-1], sizes[1:])]
+        self.biases = [np.zeros((i, 1)) for i in sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
+        self.weights = [np.zeros((i, j)) for j, i in zip(sizes[:-1], sizes[1:])]
     
     def feedforward(self, a):
         for b, w in zip(self.biases, self.weights):
@@ -28,31 +28,32 @@ class Network(object):
             # decompose inputs into random mini batches
             random.shuffle(train_data)
             mini_batches = [train_data[i:i+mini_batch_size] for i in range(0,n,mini_batch_size)]
-
             # train on each mini batch
             for mini_batch in mini_batches:
                 self.update_mini_batch(mini_batch, eta)
             
             # print results
-            if test_data:
-                cur_res = self.test(test_data)
-                change = "INF" if prev_res == 0 else (cur_res - prev_res) / prev_res
-                print(f"Epoch {epoch+1}: {cur_res}/{len(test_data)}, {change}% change")
-                prev_res = cur_res
-            else:
-                print(f"Epoch {epoch+1} complete")
+            # if test_data is not None:
+            #     cur_res = self.test(test_data)
+            #     change = "INF" if prev_res == 0 else (cur_res - prev_res) / prev_res
+            #     print(f"Epoch {epoch+1}: {cur_res}/{len(test_data)}, {change}% change")
+            #     prev_res = cur_res
+            # else:
+            #     print(f"Epoch {epoch+1} complete")
     
     def update_mini_batch(self, mini_batch, eta):
         """
         mini_batch: subset of train_data
         """
+        # print(mini_batch)
         nabla_b = [np.zeros(b.shape) for b in self.biases] # ∇b
         nabla_w = [np.zeros(w.shape) for w in self.weights] # ∇w
 
         # sum of ∇w = ∑ ∇w_j = ∑ ∂C/∂w
         # same for b
-        for x,y in mini_batch:
-            cur_nb, cur_nw = self.backprop(x,y) # calculate ∂C/∂w and ∂C/∂b
+        for x, y in mini_batch:
+            # print(f"{x}\n{y}")
+            cur_nb, cur_nw = self.backprop(x, y) # calculate ∂C/∂w and ∂C/∂b
             nabla_b = [nb + dnb for nb, dnb in zip(nabla_b, cur_nb)]
             nabla_w = [nw + dnw for nw, dnw in zip(nabla_w, cur_nw)]
         
