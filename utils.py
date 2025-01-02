@@ -15,6 +15,10 @@ class Buffer:
         self.size = size
         self.default = default
         self._buffer = [default for _ in range(size)]
+        self.idx = 0
+    
+    def __call__(self):
+        return self._buffer
     
     def get(self, idx):
         return self._buffer[idx % self.size]
@@ -24,6 +28,13 @@ class Buffer:
     
     def reset(self):
         self._buffer = [self.default for _ in range(self.size)]
+    
+    def reset_idx(self, idx=0):
+        self.idx = idx
+
+    def update(self, val):
+        self.set(self.idx, val)
+        self.idx = (self.idx + 1) % self.size
 
 
 def random_argmax(arr):

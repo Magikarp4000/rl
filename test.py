@@ -30,8 +30,8 @@ env = TestEnv()
 algo = QLearn(gamma=0.9, nstep=1)
 nn = Network([1, 10, 3], cost_type='mse')
 
-agent = NN(env, algo, nn)
-agent.train(n=1000, batch_size=10)
+agent = NN(env, algo, nn, batch=10)
+agent.train(n=1000, batch_size=1)
 
-print([agent.nn.feedforward(agent.to_state(s)) for s in range(len(agent.env.states))])
+print([agent.action_vals(s) for s in range(len(agent.env.states))])
 # agent.save('vnn0.2b', 'testenv2')

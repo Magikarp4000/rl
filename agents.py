@@ -4,7 +4,7 @@ import numpy as np
 
 from baseagent import Agent
 from envs import DiscreteEnv
-import utils
+from utils import Buffer, fit_shape
 
 from tilecoding import TileCoding
 from network import Network
@@ -17,7 +17,7 @@ class Tabular(Agent):
         
         self._q = None
         if env is not None:
-            self._q = utils.fit_shape(0, env.actions)
+            self._q = fit_shape(0, env.actions)
 
     def q(self, s, a):
         if s == self.env.T:
@@ -28,61 +28,36 @@ class Tabular(Agent):
         self._q[s][a] += self.alpha * (tgt - self.q(s, a))
 
 
-## ----------- BELOW NOT FINISHED -----------
 class TileCode(Agent):
     pass
 
 
 class NN(Agent):
-    def __init__(self, env, algo, nn: Network):
+    def __init__(self, env, algo, nn: Network, batch):
         super().__init__(env, algo, ['nn'])
         self.nn = nn
+        self.buffer = Buffer(batch)
     
     def q(self, s, a):
         if s == self.env.T:
             return self.env.T_val
-        state = self.to_state(s)
-        return self.nn.feedforward(state).flat[a]
+        return self.action_vals(s).flat[a]
     
     def update(self, tgt, s, a):
-        x = self.to_state(s)
-        y = self.nn.feedforward(x)
-        y.flat[a] = tgt
-        # print(y)
-        self.nn.train(train_data=[(x, y)], epochs=10, mini_batch_size=1, eta=0.1)
+        state = self.to_state(s)
+        output = self.action_vals(s)
+        output[a] = tgt
+        self.buffer.update((state, output))
+        if self.buffer.idx == 0 and self.buffer.get(1) is not None:
+            self.nn.train(train_data=self.buffer(), epochs=10, mini_batch_size=self.buffer.size, eta=1)
     
     def to_state(self, s):
         return self.column(self.env.states[s])
 
     def column(self, vec):
         return np.reshape(vec, (len(vec), 1))
-
-
-class DeprecatedNN(Agent):
-    def __init__(self, base_actions=[], bounds=[], start_bounds=[], dim=0):
-        super().__init__(base_actions, bounds, start_bounds, dim)
-        self.cache = []
-        self.cache_idx = None
-        self.capacity = None
-        self.sample_size = None
-        self.net_params = None
-        self.network = None
-
-    def get_data(self):
-        """
-        self.cache: (s, a, r, s', a')
-        """
-        minibatch = random.sample(self.cache, self.sample_size)
-        X = [t[:2] for t in minibatch]
-        y = [t[2] + self.gamma * self.q(t[3], t[4]) for t in minibatch]
-        return list(zip(X, y))
     
-    def approximate(self, s, a, r, new_s, new_a, *args, **kwargs):
-        # Update memory for network
-        self.cache_idx = (self.cache_idx + 1) % self.capacity
-        self.cache[self.cache_idx] = (s, a, r, new_s, new_a)
-        
-        # Train network
-        data = self.get_data()
-        self.network.train(data, epochs=1, mini_batch_size=1, eta=0.1)
-## ------------------------------------------
+    def action_vals(self, s):
+        if s == self.env.T:
+            return [0]
+        return self.nn.feedforward(self.to_state(s))
