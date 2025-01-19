@@ -1,5 +1,8 @@
 ## Basic reinforcement learning package
 
+**NOTE:**
+Everything except `agents.py`, `algos.py`, `baseagent.py`, `envs.py` is deprecated.
+
 **Algorithms:**
 
 Tabular
