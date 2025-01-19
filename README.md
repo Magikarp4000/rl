@@ -1,7 +1,7 @@
 ## Basic reinforcement learning package
 
 **NOTE:**
-Everything except `agents.py`, `algos.py`, `baseagent.py`, `envs.py` is deprecated.
+Everything except `agents.py`, `algos.py`, `baseagent.py`, `envs.py`, `test.py`, `utils.py`, `testenv/` is deprecated.
 
 **Algorithms:**
 
