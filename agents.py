@@ -32,7 +32,7 @@ class TileCode(Agent):
 
 
 class NN(Agent):
-    def __init__(self, env: Env, algo, netparams: NetParams, batch, upd_interval, buf_size=1000):
+    def __init__(self, env: Env, algo, netparams: NetParams, batch: int, upd_interval: int, buf_size=1000):
         super().__init__(env, algo, ['nn'])
         netparams.set_io(env.state_size(), env.num_actions(0))
         self.bnn = Network(netparams)
@@ -43,16 +43,13 @@ class NN(Agent):
     
     def update(self, tgt, s, a):
         state = self.to_state(s)
-        output = self.action_vals_xnn(s, self.bnn)
+        output = self.action_vals_xnn(s, self.tnn)
         output[a] = tgt
         self.buffer.update((state, output))
-        # print(self.buffer.cur_size())
-        # print(random.sample(self.buffer(), min(self.buffer.cur_size(), self.batch)))
-        self.bnn.train(train_data=random.sample(self.buffer(),
-                                                min(self.buffer.cur_size(), self.batch)),
-                        epochs=10,
-                        mini_batch_size=self.batch,
-                        eta=self.alpha())
+        self.bnn.train(train_data=random.sample(self.buffer(), min(self.buffer.cur_size(), self.batch)),
+                       epochs=1,
+                       mini_batch_size=self.batch,
+                       eta=self.alpha())
         if self.upd_cycle():
             self.tnn.update(self.bnn)
 
@@ -60,7 +57,9 @@ class NN(Agent):
         return (self.glo_steps != 0 and self.glo_steps % self.upd_interval == 0)
 
     def to_state(self, s):
-        return self.column(self.env.states[s])
+        if isinstance(self.env, DiscreteEnv):
+            return self.column(self.env.states[s])
+        return self.column(s)
 
     def column(self, vec):
         return np.reshape(vec, (len(vec), 1))
@@ -68,7 +67,7 @@ class NN(Agent):
     def q(self, s, a):
         if s == self.env.T:
             return self.env.T_val
-        return self.action_vals.flat[a]
+        return self.action_vals(s).flat[a]
     
     def action_vals(self, s):
         return self.action_vals_xnn(s, self.tnn)

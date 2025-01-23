@@ -35,7 +35,7 @@ class Agent(ABC):
 
         self.glo_steps = 0
     
-    def train(self, n, eps=Param(0.1), alpha=Param(0.1), expstart=False,
+    def train(self, n, eps=Param(0.1), alpha=Param(0.1), maxstep=np.inf, expstart=False,
               batch_size=1, display_graph=True, save_params=True, save_time=True):
         self.eps = eps
         self.alpha = alpha
@@ -44,7 +44,7 @@ class Agent(ABC):
             self._save_params(n, eps, expstart)
         
         start_time = time.time()
-        self._train(n, expstart, batch_size, display_graph)
+        self._train(n, maxstep, expstart, batch_size, display_graph)
         end_time = time.time()
 
         if save_time:
@@ -122,7 +122,7 @@ class Agent(ABC):
         except IndexError:
             pass
     
-    def _train(self, n, expstart, batch_size, display_graph):
+    def _train(self, n, maxstep, expstart, batch_size, display_graph):
         ep = 0
         steps_list = []
         self.glo_steps = 0
@@ -130,7 +130,7 @@ class Agent(ABC):
             start_time = time.time()
             start_ep = ep
             while ep < min(n, start_ep + batch_size):
-                steps = self._train_episode(expstart)
+                steps = self._train_episode(maxstep, expstart)
                 steps_list.append(steps)
                 ep += 1
             end_time = time.time()
@@ -142,7 +142,7 @@ class Agent(ABC):
         if display_graph:
             graph(steps_list, 'Episode', 'Num steps')
 
-    def _train_episode(self, expstart):
+    def _train_episode(self, maxstep, expstart):
         s, a = self._init_state_action(expstart)
         self.algo.init_episode(s, a)
 
@@ -151,7 +151,7 @@ class Agent(ABC):
         steps = 0
         episode_steps = 0
 
-        while not cmd.terminate:
+        while not (cmd.terminate or steps > maxstep):
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps())
@@ -159,12 +159,11 @@ class Agent(ABC):
                     is_terminal = True
                     episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
-            print(self.eps())
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
+            
             self.eps.update(steps, self.glo_steps)
             self.alpha.update(steps, self.glo_steps)
-            
             s, a = new_s, new_a
             steps += 1
             self.glo_steps += 1

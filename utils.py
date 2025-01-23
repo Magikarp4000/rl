@@ -41,7 +41,6 @@ class VariableBuffer(Buffer):
     def __init__(self, size, default=None):
         super().__init__(size, default)
         self._buffer = []
-        print(self._buffer)
     
     def set(self, idx, val):
         try:

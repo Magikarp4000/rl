@@ -73,9 +73,9 @@ class DiscreteEnv(Env):
 
 
 class ContinuousEnv(Env):
-    def __init__(self, base_actions=[], bounds=[], start_bounds=[]):
-        super().__init__(['base_actions', 'bounds', 'start_bounds'])
-        self.base_actions = base_actions
+    def __init__(self, actions=[], bounds=[], start_bounds=[]):
+        super().__init__(['actions', 'bounds', 'start_bounds'])
+        self.actions = actions
         self.bounds = bounds
         self.start_bounds = start_bounds
     
@@ -83,7 +83,7 @@ class ContinuousEnv(Env):
         return len(self.bounds)
 
     def num_actions(self, s):
-        return len(self.base_actions)
+        return len(self.actions)
 
     def action_spec(self, s):
         if s == self.T:
