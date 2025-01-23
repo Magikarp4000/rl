@@ -1,5 +1,7 @@
 import numpy as np
 
+from utils import name
+
 
 class Param:
     def __init__(self, x, amin=-np.inf, amax=np.inf):
@@ -9,6 +11,9 @@ class Param:
     
     def __call__(self):
         return self.x
+
+    def get_params(self):
+        return {'name': name(self), 'x': self.x}
 
     def update(self, t, glo_t): pass
 

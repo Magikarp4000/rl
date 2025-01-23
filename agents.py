@@ -33,7 +33,7 @@ class TileCode(Agent):
 
 class NN(Agent):
     def __init__(self, env: Env, algo, netparams: NetParams, batch: int, upd_interval: int, buf_size=1000):
-        super().__init__(env, algo, ['nn'])
+        super().__init__(env, algo, ['bnn', 'tnn'])
         netparams.set_io(env.state_size(), env.num_actions(0))
         self.bnn = Network(netparams)
         self.tnn = Network(netparams)

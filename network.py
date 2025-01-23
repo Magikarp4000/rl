@@ -23,6 +23,12 @@ class Network(object):
         self.biases = [np.zeros((i, 1)) for i in self.sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
         self.weights = [np.zeros((i, j)) for j, i in zip(self.sizes[:-1], self.sizes[1:])]
     
+    def get_params(self):
+        return {'biases': self.tolist(self.biases), 'weights': self.tolist(self.weights)}
+    
+    def tolist(self, arr):
+        return [x.tolist() for x in arr]
+    
     def update(self, nn):
         self.biases = copy.deepcopy(nn.biases)
         self.weights = copy.deepcopy(nn.weights)

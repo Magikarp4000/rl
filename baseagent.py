@@ -113,14 +113,20 @@ class Agent(ABC):
 
     def _save_params(self, *args, **kwargs):
         try:
-            train_args = inspect.getfullargspec(self.train)[0][2: 5]
+            train_args = inspect.getfullargspec(self.train)[0][2: 6]
             algo_args = self.algo.get_params()
             self._config_meta({'approximator': name(self)})
             self._config_meta({'algo': algo_args})
-            self._config_meta({name: val for name, val in zip(train_args, args)})
+            self._config_meta({name: self._save_x(val) for name, val in zip(train_args, args)})
             self._config_meta(kwargs)
         except IndexError:
             pass
+    
+    def _save_x(self, x):
+        try:
+            return x.get_params()
+        except AttributeError:
+            return x
     
     def _train(self, n, maxstep, expstart, batch_size, display_graph):
         ep = 0
@@ -149,7 +155,6 @@ class Agent(ABC):
         cmd = Command()
         is_terminal = False
         steps = 0
-        episode_steps = 0
 
         while not (cmd.terminate or steps > maxstep):
             if not is_terminal:
@@ -157,7 +162,6 @@ class Agent(ABC):
                 new_a = self.get_action(new_s, eps=self.eps())
                 if new_s == self.env.T:
                     is_terminal = True
-                    episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
@@ -167,7 +171,7 @@ class Agent(ABC):
             s, a = new_s, new_a
             steps += 1
             self.glo_steps += 1
-        return episode_steps
+        return steps
     
     def _init_state(self, expstart):
         if expstart:
@@ -203,7 +207,7 @@ class Agent(ABC):
         to_save = {'metadata': self._metadata}
         for name in self._config:
             try:
-                value = getattr(self, name)
+                value = self._save_x(getattr(self, name))
                 json.dumps(value)
                 to_save[name] = value
             except TypeError:
@@ -225,7 +229,7 @@ class Agent(ABC):
         return True
 
     def _get_paths(self, model_name, env_name):
-        path = f"envs/{get_dir()}/{env_name}"
+        path = f"{get_dir()}/envs/{env_name}"
         if not os.path.exists(path):
             os.makedirs(path)
         model_path = f"{path}/{model_name}.json"

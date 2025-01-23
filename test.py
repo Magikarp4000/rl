@@ -56,6 +56,9 @@ class LBF(ContinuousEnv):
         items_y = s[self.num_items + 2: -(self.num_items)]
         item_exists = s[-self.num_items:]
 
+        if not any(item_exists):
+            return self.T, self.T_reward
+
         new_item_exists = s[-self.num_items:]
         reward = 0
         if self.actions[a] == 'C':
@@ -64,12 +67,10 @@ class LBF(ContinuousEnv):
                     if (agent_x + x, agent_y + y) == (i_x, i_y) and item_exists[i]:
                         reward += 1
                         new_item_exists[i] = 0
-            if not any(item_exists):
-                return self.T, self.T_reward
         else:
             agent_x = np.clip(agent_x + self.move_map[self.actions[a]][0], 0, self.w - 1)
             agent_y = np.clip(agent_y + self.move_map[self.actions[a]][1], 0, self.h - 1)
-        new_s = [agent_x] + [agent_y] + items_x + items_y + item_exists
+        new_s = [agent_x] + [agent_y] + items_x + items_y + new_item_exists
         return new_s, reward
 
     def rand_start_state(self):
@@ -79,18 +80,16 @@ class LBF(ContinuousEnv):
         return [random.randint(*bound) for bound in self.bounds]
 
 
-LBF(3,4,1)
-
-env = LBF(3,4,3)
+env = LBF(3,4,1)
 # algo = PrioritizedSweep(TreeLearn(gamma=0.9, nstep=5), plan_algo=QLearn(), nsim=5)
 algo = QLearn(gamma=0.9, nstep=2)
 nn = NetParams([6], cost_type='mse')
 
 agent = NN(env, algo, nn, batch=20, upd_interval=100)
-agent.train(n=100, eps=Param(0.1), alpha=Param(0.1),
-            maxstep=200, batch_size=10, display_graph=True)
+agent.train(n=1000, eps=Param(0.1), alpha=Param(0.1),
+            batch_size=10, display_graph=True)
 
 # print([agent.action_vals(s) for s in range(len(agent.env.states))])
 print(agent.tnn.weights)
 print(agent.tnn.biases)
-# agent.save('v0.1b', 'lbf')
+agent.save('v0.1b', 'lbf')
