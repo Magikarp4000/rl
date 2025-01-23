@@ -1,8 +1,6 @@
 ## Basic reinforcement learning package
 
 **NOTE:**
-Everything except `agents.py`, `algos.py`, `baseagent.py`, `envs.py`, `test.py`, `utils.py`, `testenv/` is deprecated.
-
 Open AI gym + Pytorch support soon.
 
 **Algorithms:**
