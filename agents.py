@@ -11,9 +11,8 @@ from network import NetParams, Network
 
 
 class Tabular(Agent):
-    def __init__(self, env: DiscreteEnv, algo, alpha=0.1):
+    def __init__(self, env: DiscreteEnv, algo):
         super().__init__(env, algo, ['_q'])
-        self.alpha = alpha
         
         self._q = None
         if env is not None:
@@ -25,7 +24,7 @@ class Tabular(Agent):
         return self._q[s][a]
     
     def update(self, tgt, s, a):
-        self._q[s][a] += self.alpha * (tgt - self.q(s, a))
+        self._q[s][a] += self.alpha() * (tgt - self.q(s, a))
 
 
 class TileCode(Agent):
@@ -48,11 +47,12 @@ class NN(Agent):
         output[a] = tgt
         self.buffer.update((state, output))
         # print(self.buffer.cur_size())
+        # print(random.sample(self.buffer(), min(self.buffer.cur_size(), self.batch)))
         self.bnn.train(train_data=random.sample(self.buffer(),
                                                 min(self.buffer.cur_size(), self.batch)),
                         epochs=10,
                         mini_batch_size=self.batch,
-                        eta=0.1)
+                        eta=self.alpha())
         if self.upd_cycle():
             self.tnn.update(self.bnn)
 

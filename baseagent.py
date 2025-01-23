@@ -9,6 +9,7 @@ import numpy as np
 from utils import graph, get_dir, random_argmax, name
 import data_transfer
 from envs import Env
+from params import Param
 
 
 class Command:
@@ -27,12 +28,85 @@ class Agent(ABC):
         self.algo = algo
 
         self.eps = None
+        self.alpha = None
 
         self._config = config
         self._metadata = {}
 
         self.glo_steps = 0
     
+    def train(self, n, eps=Param(0.1), alpha=Param(0.1), expstart=False,
+              batch_size=1, display_graph=True, save_params=True, save_time=True):
+        self.eps = eps
+        self.alpha = alpha
+        
+        if save_params:
+            self._save_params(n, eps, expstart)
+        
+        start_time = time.time()
+        self._train(n, expstart, batch_size, display_graph)
+        end_time = time.time()
+
+        if save_time:
+            self._config_meta({'duration': str(end_time - start_time)})
+            self._config_meta({'time': str(datetime.datetime.now())})
+    
+    def test(self, num_steps=1, max_step=None, eps=0):
+        return np.mean([self._single_test(max_step, eps)] * num_steps)
+    
+    def load(self, model_name, env_name):
+        model_path, env_path = self._get_paths(model_name, env_name)
+
+        self.env.load(env_path)
+        print(f'Loaded environment {env_name}!')
+
+        self._load_model(model_path)
+        print(f'Loaded model {model_name}!')
+    
+    def save(self, model_name, env_name, overwrite_env=False):
+        model_path, env_path = self._get_paths(model_name, env_name)
+        
+        if self._confirm_save_env(env_path, overwrite_env):
+            self.env.save(env_path)
+            print(f'Saved environment {env_name}!')
+
+        if self._confirm_save_model(model_name, env_name, model_path):
+            self._save_model(model_path)
+            print(f'Saved model {model_name}!')
+
+    def get_action(self, s, eps=0):
+        if s == self.env.T:
+            return self.env.T_action
+        if random.random() < eps:
+            return self.env.rand_action(s)
+        else:
+            return self.best_bhv_action(s)
+    
+    def best_bhv_action(self, s):
+        return self.best_action(s)
+    
+    def action_vals(self, s):
+        return [self.q(s, a) for a in self.env.action_spec(s)]
+
+    def best_action(self, s, rand_tiebreak=False):
+        if rand_tiebreak:
+            return random_argmax(self.action_vals(s))
+        else:
+            return np.argmax(self.action_vals(s))
+    
+    def best_action_val(self, s):
+        return max(self.action_vals(s))
+    
+    def action_prob(self, s, a):
+        if s == self.env.T:
+            return 1
+        best_val = self.best_action_val(s)
+        prob = self.eps / self.env.num_actions(s)
+        if self.q(s, a) == best_val:
+            num_best = self.action_vals(s).count(best_val)
+            prob += (1 - self.eps) / num_best
+        return prob
+
     def _config_meta(self, data):
         for val in data:
             self._metadata.update({val: data[val]})
@@ -80,13 +154,17 @@ class Agent(ABC):
         while not cmd.terminate:
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
-                new_a = self.get_action(new_s, eps=self.eps)
+                new_a = self.get_action(new_s, eps=self.eps())
                 if new_s == self.env.T:
                     is_terminal = True
                     episode_steps = steps + 1
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
+            print(self.eps())
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
+            self.eps.update(steps, self.glo_steps)
+            self.alpha.update(steps, self.glo_steps)
+            
             s, a = new_s, new_a
             steps += 1
             self.glo_steps += 1
@@ -100,7 +178,7 @@ class Agent(ABC):
 
     def _init_state_action(self, expstart=False):
         s = self._init_state(expstart)
-        a = self.get_action(s, eps=1)
+        a = self.get_action(s, eps=1)  # Random action
         return s, a
 
     def _single_test(self, max_step=None, eps=0):
@@ -154,77 +232,6 @@ class Agent(ABC):
         model_path = f"{path}/{model_name}.json"
         env_path = f"{path}/env.json"
         return model_path, env_path
-
-    def get_action(self, s, eps=0):
-        if s == self.env.T:
-            return self.env.T_action
-        if random.random() < eps:
-            return self.env.rand_action(s)
-        else:
-            return self.best_bhv_action(s)
-    
-    def best_bhv_action(self, s):
-        return self.best_action(s)
-    
-    def action_vals(self, s):
-        return [self.q(s, a) for a in self.env.action_spec(s)]
-
-    def best_action(self, s, rand_tiebreak=False):
-        if rand_tiebreak:
-            return random_argmax(self.action_vals(s))
-        else:
-            return np.argmax(self.action_vals(s))
-    
-    def best_action_val(self, s):
-        return max(self.action_vals(s))
-    
-    def action_prob(self, s, a):
-        if s == self.env.T:
-            return 1
-        best_val = self.best_action_val(s)
-        prob = self.eps / self.env.num_actions(s)
-        if self.q(s, a) == best_val:
-            num_best = self.action_vals(s).count(best_val)
-            prob += (1 - self.eps) / num_best
-        return prob
-
-    def load(self, model_name, env_name):
-        model_path, env_path = self._get_paths(model_name, env_name)
-
-        self.env.load(env_path)
-        print(f'Loaded environment {env_name}!')
-
-        self._load_model(model_path)
-        print(f'Loaded model {model_name}!')
-    
-    def save(self, model_name, env_name, overwrite_env=False):
-        model_path, env_path = self._get_paths(model_name, env_name)
-        
-        if self._confirm_save_env(env_path, overwrite_env):
-            self.env.save(env_path)
-            print(f'Saved environment {env_name}!')
-
-        if self._confirm_save_model(model_name, env_name, model_path):
-            self._save_model(model_path)
-            print(f'Saved model {model_name}!')
-    
-    def train(self, n, eps=0.1, expstart=False,
-              batch_size=1, display_graph=True, save_params=True, save_time=True):
-        self.eps = eps
-        
-        if save_params:
-            self._save_params(n, eps, expstart)
-        
-        start_time = time.time()
-        self._train(n, expstart, batch_size, display_graph)
-        end_time = time.time()
-
-        if save_time:
-            self._config_meta({'duration': str(end_time - start_time)})
-            self._config_meta({'time': str(datetime.datetime.now())})
-    
-    def test(self, num_steps=1, max_step=None, eps=0):
-        return np.mean([self._single_test(max_step, eps)] * num_steps)
 
     def load_convert(self): pass
     def save_convert(self): pass
