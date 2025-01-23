@@ -3,12 +3,12 @@ import random
 from agents import Tabular, NN
 from algos import *
 import envs
-from network import Network
+from network import NetParams
 
 
 class TestEnv(envs.DiscreteEnv):
     def __init__(self):
-        super().__init__(states=[[10],[20]], actions=[[1,5,6],[2,3,4]], start_states=[1])
+        super().__init__(states=[[1], [2]], actions=[[1,5,6],[2,3,4]], start_states=[1])
 
     def next_state(self, s, a):
         if s == 0:
@@ -28,10 +28,12 @@ class TestEnv(envs.DiscreteEnv):
 env = TestEnv()
 # algo = PrioritizedSweep(TreeLearn(gamma=0.9, nstep=5), plan_algo=QLearn(), nsim=5)
 algo = QLearn(gamma=0.9, nstep=1)
-nn = Network([1, 10, 3], cost_type='mse')
+nn = NetParams([6], cost_type='mse')
 
-agent = NN(env, algo, nn, batch=10)
-agent.train(n=1000, batch_size=1)
+agent = NN(env, algo, nn, batch=10, upd_interval=20)
+agent.train(n=1000, batch_size=10, display_graph=False)
 
 print([agent.action_vals(s) for s in range(len(agent.env.states))])
+print(agent.tnn.weights)
+print(agent.tnn.biases)
 # agent.save('vnn0.2b', 'testenv2')

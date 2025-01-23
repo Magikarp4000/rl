@@ -3,11 +3,11 @@ import random
 import numpy as np
 
 from baseagent import Agent
-from envs import DiscreteEnv
-from utils import Buffer, fit_shape
+from envs import Env, DiscreteEnv
+from utils import VariableBuffer, fit_shape
 
 from tilecoding import TileCoding
-from network import Network
+from network import NetParams, Network
 
 
 class Tabular(Agent):
@@ -33,31 +33,50 @@ class TileCode(Agent):
 
 
 class NN(Agent):
-    def __init__(self, env, algo, nn: Network, batch):
+    def __init__(self, env: Env, algo, netparams: NetParams, batch, upd_interval, buf_size=1000):
         super().__init__(env, algo, ['nn'])
-        self.nn = nn
-        self.buffer = Buffer(batch)
-    
-    def q(self, s, a):
-        if s == self.env.T:
-            return self.env.T_val
-        return self.action_vals(s).flat[a]
+        netparams.set_io(env.state_size(), env.num_actions(0))
+        self.bnn = Network(netparams)
+        self.tnn = Network(netparams)
+        self.batch = batch
+        self.upd_interval = upd_interval
+        self.buffer = VariableBuffer(buf_size)
     
     def update(self, tgt, s, a):
         state = self.to_state(s)
-        output = self.action_vals(s)
+        output = self.action_vals_xnn(s, self.bnn)
         output[a] = tgt
         self.buffer.update((state, output))
-        if self.buffer.idx == 0 and self.buffer.get(1) is not None:
-            self.nn.train(train_data=self.buffer(), epochs=10, mini_batch_size=self.buffer.size, eta=1)
-    
+        # print(self.buffer.cur_size())
+        self.bnn.train(train_data=random.sample(self.buffer(),
+                                                min(self.buffer.cur_size(), self.batch)),
+                        epochs=10,
+                        mini_batch_size=self.batch,
+                        eta=0.1)
+        if self.upd_cycle():
+            self.tnn.update(self.bnn)
+
+    def upd_cycle(self):
+        return (self.glo_steps != 0 and self.glo_steps % self.upd_interval == 0)
+
     def to_state(self, s):
         return self.column(self.env.states[s])
 
     def column(self, vec):
         return np.reshape(vec, (len(vec), 1))
     
+    def q(self, s, a):
+        if s == self.env.T:
+            return self.env.T_val
+        return self.action_vals.flat[a]
+    
     def action_vals(self, s):
+        return self.action_vals_xnn(s, self.tnn)
+    
+    def best_bhv_action(self, s):
+        return np.argmax(self.action_vals_xnn(s, self.bnn))
+    
+    def action_vals_xnn(self, s, xnn: Network):
         if s == self.env.T:
             return [0]
-        return self.nn.feedforward(self.to_state(s))
+        return xnn.feedforward(self.to_state(s))

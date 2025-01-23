@@ -1,14 +1,31 @@
 import numpy as np
 import random
+import copy
 
 
-class Network(object):
-    def __init__(self, sizes, cost_type) -> None:
+class NetParams:
+    def __init__(self, sizes, cost_type):
         self.sizes = sizes
         self.num_layers = len(sizes)
         self.cost_type = cost_type.lower()
-        self.biases = [np.zeros((i, 1)) for i in sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
-        self.weights = [np.zeros((i, j)) for j, i in zip(sizes[:-1], sizes[1:])]
+    
+    def set_io(self, input_size, output_size):
+        self.sizes.insert(0, input_size)
+        self.sizes.append(output_size)
+        self.num_layers += 2
+
+
+class Network(object):
+    def __init__(self, params: NetParams) -> None:
+        self.sizes = params.sizes
+        self.num_layers = params.num_layers
+        self.cost_type = params.cost_type
+        self.biases = [np.zeros((i, 1)) for i in self.sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
+        self.weights = [np.zeros((i, j)) for j, i in zip(self.sizes[:-1], self.sizes[1:])]
+    
+    def update(self, nn):
+        self.biases = copy.deepcopy(nn.biases)
+        self.weights = copy.deepcopy(nn.weights)
     
     def feedforward(self, a):
         for b, w in zip(self.biases, self.weights):

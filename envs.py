@@ -22,6 +22,9 @@ class Env(ABC):
         data_transfer.save(file, data)
     
     @abstractmethod
+    def state_size(self): pass
+
+    @abstractmethod
     def num_actions(self, s): pass
 
     @abstractmethod
@@ -47,6 +50,9 @@ class DiscreteEnv(Env):
         self.actions = actions
         self.start_states = start_states  # state indices
         self.size = len(states)
+
+    def state_size(self):
+        return len(self.states[0])
     
     def num_actions(self, s):
         return len(self.actions[s])
@@ -73,6 +79,9 @@ class ContinuousEnv(Env):
         self.bounds = bounds
         self.start_bounds = start_bounds
     
+    def state_size(self):
+        return len(self.bounds)
+
     def num_actions(self, s):
         return len(self.base_actions)
 

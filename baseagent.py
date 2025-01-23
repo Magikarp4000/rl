@@ -30,6 +30,8 @@ class Agent(ABC):
 
         self._config = config
         self._metadata = {}
+
+        self.glo_steps = 0
     
     def _config_meta(self, data):
         for val in data:
@@ -46,10 +48,10 @@ class Agent(ABC):
         except IndexError:
             pass
     
-    def _train(self, n, expstart, batch_size):
+    def _train(self, n, expstart, batch_size, display_graph):
         ep = 0
         steps_list = []
-        self.cache_idx = 0
+        self.glo_steps = 0
         while ep < n:
             start_time = time.time()
             start_ep = ep
@@ -59,10 +61,12 @@ class Agent(ABC):
                 ep += 1
             end_time = time.time()
             if batch_size == 1:
-                print(f"Episode {ep} complete in {round(end_time - start_time, 3)}s.")
+                print(f"Episode {ep} complete in {round(end_time - start_time, 3)}s", end=", ")
             else:
-                print(f"Episodes {start_ep + 1} - {ep} complete in {round(end_time - start_time, 3)}s.")
-        graph(steps_list, 'Episode', 'Num steps')
+                print(f"Episodes {start_ep + 1} - {ep} complete in {round(end_time - start_time, 3)}s", end=", ")
+            print(f"{np.mean(steps_list[ep - batch_size:])} steps avg.")
+        if display_graph:
+            graph(steps_list, 'Episode', 'Num steps')
 
     def _train_episode(self, expstart):
         s, a = self._init_state_action(expstart)
@@ -85,6 +89,7 @@ class Agent(ABC):
                 self.update(cmd.tgt, cmd.s, cmd.a)
             s, a = new_s, new_a
             steps += 1
+            self.glo_steps += 1
         return episode_steps
     
     def _init_state(self, expstart):
@@ -143,7 +148,7 @@ class Agent(ABC):
         return True
 
     def _get_paths(self, model_name, env_name):
-        path = f"{get_dir()}/{env_name}"
+        path = f"envs/{get_dir()}/{env_name}"
         if not os.path.exists(path):
             os.makedirs(path)
         model_path = f"{path}/{model_name}.json"
@@ -156,7 +161,10 @@ class Agent(ABC):
         if random.random() < eps:
             return self.env.rand_action(s)
         else:
-            return self.best_action(s)
+            return self.best_bhv_action(s)
+    
+    def best_bhv_action(self, s):
+        return self.best_action(s)
     
     def action_vals(self, s):
         return [self.q(s, a) for a in self.env.action_spec(s)]
@@ -200,14 +208,15 @@ class Agent(ABC):
             self._save_model(model_path)
             print(f'Saved model {model_name}!')
     
-    def train(self, n, eps=0.1, expstart=False, batch_size=1, save_params=True, save_time=True):
+    def train(self, n, eps=0.1, expstart=False,
+              batch_size=1, display_graph=True, save_params=True, save_time=True):
         self.eps = eps
         
         if save_params:
             self._save_params(n, eps, expstart)
         
         start_time = time.time()
-        self._train(n, expstart, batch_size)
+        self._train(n, expstart, batch_size, display_graph)
         end_time = time.time()
 
         if save_time:

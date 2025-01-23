@@ -37,6 +37,22 @@ class Buffer:
         self.idx = (self.idx + 1) % self.size
 
 
+class VariableBuffer(Buffer):
+    def __init__(self, size, default=None):
+        super().__init__(size, default)
+        self._buffer = []
+        print(self._buffer)
+    
+    def set(self, idx, val):
+        try:
+            self._buffer[idx % self.size] = val
+        except IndexError:
+            self._buffer.append(val)
+    
+    def cur_size(self):
+        return len(self._buffer)
+
+
 def random_argmax(arr):
     return int(np.random.choice(np.flatnonzero(arr == np.max(arr, axis=0))))
 
