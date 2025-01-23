@@ -1,0 +1,1 @@
+{"metadata": {"approximator": "tabular", "algo": {"name": "qlearn", "gamma": 0.9, "nstep": 1}, "eps": 1000, "expstart": 0.1, "batch_size": false, "duration": "2.062976837158203", "time": "2025-01-02 11:01:59.831427"}, "_q": [[0.0, 0.0, 0.0], [9.999999999999908, 4.771938017890212, 0.9999999999999996]]}

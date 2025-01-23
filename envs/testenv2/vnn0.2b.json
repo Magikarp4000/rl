@@ -1,0 +1,1 @@
+{"metadata": {"approximator": "nn", "algo": {"name": "qlearn", "gamma": 0.9, "nstep": 1}, "eps": 1000, "expstart": 0.1, "batch_size": false, "duration": "8.287379026412964", "time": "2025-01-02 11:14:20.090484"}}

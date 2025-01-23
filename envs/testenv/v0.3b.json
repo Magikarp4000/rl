@@ -1,0 +1,1 @@
+{"metadata": {"approximator": "tabular", "algo": {"name": "explorebonus", "algo": {"name": "treelearn", "alpha": 0.1, "gamma": 0.9, "nstep": 5}, "kappa": 0.05}, "n": 1000, "eps": 0.1, "expstart": false, "duration": "3.718308210372925", "time": "2024-12-27 20:40:25.387286"}, "_q": [[0.1296170415900707], [10.49608036218482, 7.590992631441212, 1.2287076146252647]]}

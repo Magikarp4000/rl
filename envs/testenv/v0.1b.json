@@ -1,0 +1,1 @@
+{"metadata": {"approximator": "tabular", "algo": "nstepsarsa", "alpha": 0.1, "gamma": 1, "nstep": 5, "n": 1000, "eps": 0.1, "expstart": false, "duration": "1.486875057220459", "time": "2024-12-23 21:01:53.277127"}, "_q": [[0.0], [33.35777581606234, 10.443281798020953, 0.9999999999999996]]}
