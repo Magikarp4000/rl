@@ -11,6 +11,8 @@ class EnvScene(QGraphicsScene):
 class EnvView(QGraphicsView):
     def __init__(self, scene):
         super().__init__(scene)
+        self.scene().setParent(self)
+        self.setMouseTracking(True)
         self.viewport().installEventFilter(self)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)

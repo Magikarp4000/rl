@@ -116,6 +116,14 @@ def force_round(x, num_round):
 def get_dir(file=__file__):
     return os.path.dirname(os.path.realpath(file))
 
+def flatten(arr):
+    if not isinstance(arr, list):
+        return [arr]
+    res = []
+    for x in arr:
+        res.extend(flatten(x))
+    return res
+
 def fit_shape(val, arr):
     if not isinstance(arr, list):
         return val
