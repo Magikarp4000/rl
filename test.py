@@ -22,12 +22,6 @@ class TestEnv(DiscreteEnv):
         return new_s, r
 
 
-class Cell(Enum):
-    EMPTY = 0
-    AGENT = 1
-    ITEM = 2
-
-
 class LBF(ContinuousEnv):
     def __init__(self, w, h, num_items):
         actions = ['U', 'D', 'L', 'R', 'C', 'X']
