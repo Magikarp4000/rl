@@ -1,5 +1,4 @@
 import random
-from enum import Enum
 
 from agents import Tabular, NN
 from algos import *
@@ -74,7 +73,7 @@ class LBF(ContinuousEnv):
         return [random.randint(*bound) for bound in self.bounds]
 
 
-env = LBF(3,4,1)
+env = LBF(10,6,1)
 # algo = PrioritizedSweep(TreeLearn(gamma=0.9, nstep=5), plan_algo=QLearn(), nsim=5)
 algo = QLearn(gamma=0.9, nstep=2)
 nn = NetParams([6], cost_type='mse')
@@ -84,6 +83,11 @@ agent.train(n=1000, eps=Param(0.1), alpha=Param(0.1),
             batch_size=10, display_graph=True)
 
 # print([agent.action_vals(s) for s in range(len(agent.env.states))])
+
+# agent = NN(LBF(3, 4, 1), QLearn(gamma=0.9, nstep=2))
+# agent.load('v0.1b', 'lbf')
+# print(agent.bnn['weights'])
+
 print(agent.tnn.weights)
 print(agent.tnn.biases)
-agent.save('v0.1b', 'lbf')
+agent.save('v0.1b', 'lbf2')

@@ -8,6 +8,7 @@ from PySide6.QtCore import (
     QLine,
     QLineF,
     Signal,
+    QTimer,
 )
 from PySide6.QtGui import (
     QBrush,

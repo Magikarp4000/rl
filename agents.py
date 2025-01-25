@@ -32,14 +32,20 @@ class TileCode(Agent):
 
 
 class NN(Agent):
-    def __init__(self, env: Env, algo, netparams: NetParams, batch: int, upd_interval: int, buf_size=1000):
-        super().__init__(env, algo, ['bnn', 'tnn'])
-        netparams.set_io(env.state_size(), env.num_actions(0))
-        self.bnn = Network(netparams)
-        self.tnn = Network(netparams)
+    def __init__(self, env: Env, algo, netparams: NetParams=None,
+                 batch: int=20, upd_interval: int=100, buf_size: int=1000):
+        super().__init__(env, algo, ['bnn', 'tnn', 'batch', 'upd_interval', 'buf_size'])
+        if netparams is not None:
+            netparams.set_io(env.state_size(), env.num_actions(0))
+            self.bnn = Network(netparams)
+            self.tnn = Network(netparams)
         self.batch = batch
         self.upd_interval = upd_interval
-        self.buffer = VariableBuffer(buf_size)
+        self.buf_size = buf_size
+        self.buffer = VariableBuffer(self.buf_size)
+    
+    def load_convert(self):
+        self.buffer = VariableBuffer(self.buf_size)
     
     def update(self, tgt, s, a):
         state = self.to_state(s)

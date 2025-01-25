@@ -29,6 +29,9 @@ class Network(object):
     def tolist(self, arr):
         return [x.tolist() for x in arr]
     
+    def tonparray(self, arr):
+        return [np.array(x) for x in arr]
+    
     def update(self, nn):
         self.biases = copy.deepcopy(nn.biases)
         self.weights = copy.deepcopy(nn.weights)
