@@ -199,7 +199,11 @@ class Agent(ABC):
             if name == 'metadata':
                 self._metadata = to_load[name]
             elif name in self._config:
-                setattr(self, name, to_load[name])
+                # try:
+                #     val = to_load[name].load()
+                # except AttributeError:
+                #     val = to_load[name]
+                setattr(self, name, val)
         self.load_convert()
     
     def _save_model(self, model_path):

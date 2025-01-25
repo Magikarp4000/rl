@@ -72,7 +72,8 @@ class LBF(ContinuousEnv):
     def rand_state(self):
         return [random.randint(*bound) for bound in self.bounds]
 
-
+print(LBF(3,4,1).__dict__)
+exit()
 env = LBF(10,6,1)
 # algo = PrioritizedSweep(TreeLearn(gamma=0.9, nstep=5), plan_algo=QLearn(), nsim=5)
 algo = QLearn(gamma=0.9, nstep=2)
