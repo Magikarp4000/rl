@@ -13,6 +13,7 @@ Tabular
 
 Function approximation
 - Tile coding
+- Deep-Q network
 
 **Examples:**
 - K-bandits

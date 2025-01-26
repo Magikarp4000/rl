@@ -150,9 +150,12 @@ def sigmoid(x):
     return 1.0 / (1.0 + np.exp(-x))
 
 def sigmoid_deriv(x):
-    return sigmoid(x) * (1.0 - sigmoid(x)) 
+    return sigmoid(x) * (1.0 - sigmoid(x))
 
-
+# x = Network(NetParams([1,6,3], 'mse')).__str__()
+# print(x)
+# from data_transfer import *
+# save('bruh.json', x)
 # import mnist_loader
 
 # tr_d, va_d, te_d = mnist_loader.load_data_wrapper()

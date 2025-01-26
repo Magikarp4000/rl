@@ -21,6 +21,8 @@ class Env(ABC):
         data = {name: getattr(self, name) for name in self.config}
         data_transfer.save(file, data)
     
+    def decode_state(self, s): pass
+
     @abstractmethod
     def state_size(self): pass
 

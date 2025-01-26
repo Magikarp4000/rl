@@ -34,6 +34,8 @@ class Agent(ABC):
         self._metadata = {}
 
         self.glo_steps = 0
+        self.replay = [[], []]
+        self.active_id = 0
     
     def train(self, n, eps=Param(0.1), alpha=Param(0.1), maxstep=np.inf, expstart=False,
               batch_size=1, display_graph=True, save_params=True, save_time=True):
@@ -132,6 +134,7 @@ class Agent(ABC):
         ep = 0
         steps_list = []
         self.glo_steps = 0
+        self.active_id = 0
         while ep < n:
             start_time = time.time()
             start_ep = ep
@@ -156,18 +159,23 @@ class Agent(ABC):
         is_terminal = False
         steps = 0
 
+        self.active_id ^= 1
+        self.replay[self.active_id].clear()
+
         while not (cmd.terminate or steps > maxstep):
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps())
                 if new_s == self.env.T:
                     is_terminal = True
+                self.replay[self.active_id].append((s, a, r))
+            
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
-            
             self.eps.update(steps, self.glo_steps)
             self.alpha.update(steps, self.glo_steps)
+
             s, a = new_s, new_a
             steps += 1
             self.glo_steps += 1
@@ -184,10 +192,10 @@ class Agent(ABC):
         a = self.get_action(s, eps=1)  # Random action
         return s, a
 
-    def _single_test(self, max_step=None, eps=0):
+    def _single_test(self, max_step=np.inf, eps=0):
         steps = 0
         s, a = self._init_state_action()
-        while s != self.env.T and (max_step is None or steps < max_step):
+        while not (s == self.env.T or steps > max_step):
             a = self.get_action(s, eps=eps)
             s, _ = self.env.next_state(s, a)
             steps += 1
@@ -203,7 +211,7 @@ class Agent(ABC):
                 #     val = to_load[name].load()
                 # except AttributeError:
                 #     val = to_load[name]
-                setattr(self, name, val)
+                setattr(self, name, to_load[name])
         self.load_convert()
     
     def _save_model(self, model_path):
