@@ -47,8 +47,13 @@ class LBFScene(GridScene):
     def __init__(self, width=400, height=250):
         super().__init__(width, height)
         self.agent_disp = LBFAgentDisplay(0, 0, CELL_SIZE, self.cells)
-    
+        self.items_disp = [LBFItemDisplay(0, 0, CELL_SIZE, self.cells)
+                           for _ in range(NUM_ITEMS)]
+
     def update_state(self, agent_x, agent_y, items_x, items_y, item_exists):
+        for item, x, y, exist in zip(self.items_disp, items_x, items_y, item_exists):
+            item.update_pos(x, y)
+            item.update_existence(exist)
         self.agent_disp.update_pos(agent_x, agent_y)
 
 
@@ -58,8 +63,6 @@ class LBFAgentDisplay(QGraphicsRectItem):
         self.setBrush(Qt.red)
         self.setRect(0, 0, size, size)
         self.setPos(x * size, y * size)
-        self.xpos = x
-        self.ypos = y
         self.size = size
     
     def update_pos(self, x, y):
@@ -72,7 +75,11 @@ class LBFItemDisplay(QGraphicsRectItem):
         self.setBrush(Qt.blue)
         self.setRect(0, 0, size, size)
         self.setPos(x * size, y * size)
+        self.size = size
     
+    def update_pos(self, x, y):
+        self.setPos(x * self.size, y * self.size)
+
     def update_existence(self, exist):
         self.setVisible(exist)
 

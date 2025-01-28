@@ -10,6 +10,16 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 
+class StepData:
+    def __init__(self, s, a, r, step_num, ep_num):
+        self.s = s
+        self.a = a
+        self.r = r
+        self.step_num = step_num
+        self.ep_num = ep_num
+        self.sar = (self.s, self.a, self.r)
+
+
 class Buffer:
     def __init__(self, size, default=None):
         self.size = size
@@ -50,6 +60,57 @@ class VariableBuffer(Buffer):
     
     def cur_size(self):
         return len(self._buffer)
+
+
+class SingleBuffer(list):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ep = 0
+    
+    def set_ep(self, ep):
+        self.ep = ep
+
+
+class ReplayBuffer:
+    def __init__(self):
+        self._buf1 = SingleBuffer()
+        self._buf2 = SingleBuffer()
+        self._write = self._buf1
+        self._read = self._buf1
+        self._read_idx = 0
+    
+    def read(self):
+        if self._read_idx < len(self._read):
+            return StepData(*self._read[self._read_idx], self._read_idx, self._read.ep)
+        self._reset_read()
+        if self._read:
+            return self._read[0]
+        return None
+    
+    def next(self):
+        if self._read_idx < len(self._read):
+            self._read_idx += 1
+        else:
+            self._reset_read()
+
+    def write(self, val):
+        self._write.append(val)
+    
+    def create_new_ep(self, ep):
+        if self._write is self._read and len(self._write) > 0:
+            self._swap_write()
+        self._write.clear()
+        self._write.set_ep(ep)
+    
+    def _reset_read(self):
+        self._read = self._write
+        self._read_idx = 0
+
+    def _swap_write(self):
+        if self._write == self._buf1:
+            self._write = self._buf2
+        else:
+            self._write = self._buf1
 
 
 def random_argmax(arr):

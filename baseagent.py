@@ -6,7 +6,13 @@ import inspect
 
 import numpy as np
 
-from utils import graph, get_dir, random_argmax, name
+from utils import (
+    graph,
+    get_dir,
+    random_argmax,
+    name,
+    ReplayBuffer,
+)
 import data_transfer
 from envs import Env
 from params import Param
@@ -30,12 +36,12 @@ class Agent(ABC):
         self.eps = None
         self.alpha = None
 
+        self.ep = 0
+        self.glo_steps = 0
+        self.replay = ReplayBuffer()
+
         self._config = config
         self._metadata = {}
-
-        self.glo_steps = 0
-        self.replay = [[], []]
-        self.active_id = 0
     
     def train(self, n, eps=Param(0.1), alpha=Param(0.1), maxstep=np.inf, expstart=False,
               batch_size=1, display_graph=True, save_params=True, save_time=True):
@@ -90,7 +96,7 @@ class Agent(ABC):
     def action_vals(self, s):
         return [self.q(s, a) for a in self.env.action_spec(s)]
 
-    def best_action(self, s, rand_tiebreak=False):
+    def best_action(self, s, rand_tiebreak=True):
         if rand_tiebreak:
             return random_argmax(self.action_vals(s))
         else:
@@ -131,23 +137,24 @@ class Agent(ABC):
             return x
     
     def _train(self, n, maxstep, expstart, batch_size, display_graph):
-        ep = 0
         steps_list = []
+        self.ep = 0
         self.glo_steps = 0
-        self.active_id = 0
-        while ep < n:
+        self.active_buf = 0
+
+        while self.ep < n:
             start_time = time.time()
-            start_ep = ep
-            while ep < min(n, start_ep + batch_size):
-                steps = self._train_episode(maxstep, expstart)
+            start_ep = self.ep
+            while self.ep < min(n, start_ep + batch_size):
+                steps = self._train_episode(maxstep, expstart,)
                 steps_list.append(steps)
-                ep += 1
+                self.ep += 1
             end_time = time.time()
             if batch_size == 1:
-                print(f"Episode {ep} complete in {round(end_time - start_time, 3)}s", end=", ")
+                print(f"Episode {self.ep} complete in {round(end_time - start_time, 3)}s", end=", ")
             else:
-                print(f"Episodes {start_ep + 1} - {ep} complete in {round(end_time - start_time, 3)}s", end=", ")
-            print(f"{np.mean(steps_list[ep - batch_size:])} steps avg.")
+                print(f"Episodes {start_ep + 1} - {self.ep} complete in {round(end_time - start_time, 3)}s", end=", ")
+            print(f"{np.mean(steps_list[self.ep - batch_size:])} steps avg.")
         if display_graph:
             graph(steps_list, 'Episode', 'Num steps')
 
@@ -158,9 +165,7 @@ class Agent(ABC):
         cmd = Command()
         is_terminal = False
         steps = 0
-
-        self.active_id ^= 1
-        self.replay[self.active_id].clear()
+        self.replay.create_new_ep(self.ep + 1)
 
         while not (cmd.terminate or steps > maxstep):
             if not is_terminal:
@@ -168,7 +173,7 @@ class Agent(ABC):
                 new_a = self.get_action(new_s, eps=self.eps())
                 if new_s == self.env.T:
                     is_terminal = True
-                self.replay[self.active_id].append((s, a, r))
+                self.replay.write((s, self.env.actions[a], r))
             
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
             if cmd.update:

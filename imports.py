@@ -2,6 +2,7 @@ from config import *
 
 from PySide6.QtCore import (
     Qt,
+    QObject,
     QPointF,
     QPoint,
     QEvent,
@@ -40,6 +41,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSlider,
     QVBoxLayout,
+    QGridLayout,
     QWidget,
     QMainWindow,
     QLineEdit,
