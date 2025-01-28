@@ -38,7 +38,7 @@ class LBF(ContinuousEnv):
             for x, y in self.move_map.values():
                 for i, (i_x, i_y) in enumerate(zip(items_x, items_y)):
                     if (agent_x + x, agent_y + y) == (i_x, i_y) and item_exists[i]:
-                        reward += 100
+                        reward += 10
                         new_item_exists[i] = 0
         else:
             agent_x = np.clip(agent_x + self.move_map[self.actions[a]][0], 0, self.w - 1)

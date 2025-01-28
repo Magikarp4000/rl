@@ -81,10 +81,10 @@ class ReplayBuffer:
     
     def read(self):
         if self._read_idx < len(self._read):
-            return StepData(*self._read[self._read_idx], self._read_idx, self._read.ep)
+            return self._get_data()
         self._reset_read()
         if self._read:
-            return self._read[0]
+            return self._get_data()
         return None
     
     def next(self):
@@ -102,6 +102,9 @@ class ReplayBuffer:
         self._write.clear()
         self._write.set_ep(ep)
     
+    def _get_data(self):
+        return StepData(*self._read[self._read_idx], self._read_idx, self._read.ep)
+
     def _reset_read(self):
         self._read = self._write
         self._read_idx = 0

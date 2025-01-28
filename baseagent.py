@@ -3,6 +3,7 @@ import random, time, datetime
 import os
 import json
 import inspect
+import threading
 
 import numpy as np
 
@@ -17,6 +18,13 @@ import data_transfer
 from envs import Env
 from params import Param
 
+from observer import Observer
+from rlsignal import RLSignal
+
+
+class ThreadInterrupt(Exception):
+    pass
+
 
 class Command:
     def __init__(self, tgt=None, s=None, a=None, terminate=False, update=True):
@@ -27,7 +35,7 @@ class Command:
         self.update = update
 
 
-class Agent(ABC):
+class Agent(ABC, Observer):
     def __init__(self, env: Env, algo, config=[]):
         super().__init__()
         self.env = env
@@ -40,9 +48,26 @@ class Agent(ABC):
         self.glo_steps = 0
         self.replay = ReplayBuffer()
 
+        self.train_thread = None
+        self.running = False
+
         self._config = config
         self._metadata = {}
     
+    def respond(self, obj, signal):
+        if signal == RLSignal.TRAIN_START:
+            self.running = True
+            self.train_thread = threading.Thread(
+                target=self.train,
+                kwargs={'n': 1000, 'eps': Param(0.1), 'alpha': Param(0.01),
+                        'batch_size': 1, 'display_graph': False},
+                daemon=True,
+            )
+            self.train_thread.start()
+        elif signal == RLSignal.TRAIN_STOP:
+            self.running = False
+            self.train_thread.join()
+
     def train(self, n, eps=Param(0.1), alpha=Param(0.1), maxstep=np.inf, expstart=False,
               batch_size=1, display_graph=True, save_params=True, save_time=True):
         self.eps = eps
@@ -52,7 +77,10 @@ class Agent(ABC):
             self._save_params(n, eps, expstart)
         
         start_time = time.time()
-        self._train(n, maxstep, expstart, batch_size, display_graph)
+        try:
+            self._train(n, maxstep, expstart, batch_size, display_graph)
+        except ThreadInterrupt:
+            return
         end_time = time.time()
 
         if save_time:
@@ -146,7 +174,7 @@ class Agent(ABC):
             start_time = time.time()
             start_ep = self.ep
             while self.ep < min(n, start_ep + batch_size):
-                steps = self._train_episode(maxstep, expstart,)
+                steps = self._train_episode(maxstep, expstart)
                 steps_list.append(steps)
                 self.ep += 1
             end_time = time.time()
@@ -168,6 +196,9 @@ class Agent(ABC):
         self.replay.create_new_ep(self.ep + 1)
 
         while not (cmd.terminate or steps > maxstep):
+            if not self.running:
+                raise ThreadInterrupt()
+            
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps())
@@ -212,10 +243,6 @@ class Agent(ABC):
             if name == 'metadata':
                 self._metadata = to_load[name]
             elif name in self._config:
-                # try:
-                #     val = to_load[name].load()
-                # except AttributeError:
-                #     val = to_load[name]
                 setattr(self, name, to_load[name])
         self.load_convert()
     
