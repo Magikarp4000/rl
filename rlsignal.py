@@ -6,3 +6,4 @@ class RLSignal(Enum):
     EP_UPDATE = 1
     TRAIN_START = 2
     TRAIN_STOP = 3
+    FPS_CHANGE = 4

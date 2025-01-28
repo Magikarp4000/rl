@@ -32,7 +32,6 @@ class GridScene(EnvScene):
         d_pos = event.scenePos() - event.lastScenePos()
         if Qt.MouseButton.LeftButton in event.buttons():
             self.cells.moveBy(*d_pos.toTuple())
-
             if self.cells.x() < 0:
                 self.cells.setX(0)
             if self.cells.x() > self.width() - self.grid_width:

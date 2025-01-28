@@ -50,6 +50,8 @@ class EnvControl(Observable, Observer):
             self.timer.start(1000 / FPS)
         elif signal == RLSignal.TRAIN_STOP:
             self.timer.stop()
+        elif signal == RLSignal.FPS_CHANGE:
+            self.timer.setInterval(1000 / obj.slider.value())
 
 
 class GuiLabel(Observer):
@@ -104,6 +106,17 @@ class StopButton(Observable, Observer):
             self.btn.setVisible(True)
 
 
+class FPSSlider(Observable):
+    def __init__(self):
+        super().__init__()
+        self.slider = QSlider()
+        self.slider.setMinimum(1)
+        self.slider.setMaximum(60)
+        self.slider.setValue(FPS)
+        self.slider.setOrientation(Qt.Horizontal)
+        self.slider.sliderMoved.connect(lambda: self.notify(RLSignal.FPS_CHANGE))
+
+
 class Gui(QWidget):
     def __init__(self, agent: Agent, control: EnvControl):
         super().__init__()
@@ -114,6 +127,12 @@ class Gui(QWidget):
         self.info = GuiLabel("Info:")
         self.train_btn = TrainButton()
         self.stop_btn = StopButton()
+        self.fpsslider = FPSSlider()
+        self.ctrl_panel_wgt = QWidget()
+        self.ctrl_panel = QHBoxLayout(self.ctrl_panel_wgt)
+        self.ctrl_panel.addWidget(self.train_btn.btn)
+        self.ctrl_panel.addWidget(self.stop_btn.btn)
+        self.ctrl_panel.addWidget(self.fpsslider.slider)
 
         self.control.observe(agent)
         self.control.attach(self.info)
@@ -123,12 +142,12 @@ class Gui(QWidget):
         self.stop_btn.attach(self.train_btn)
         self.stop_btn.attach(self.agent)
         self.stop_btn.attach(self.control)
+        self.fpsslider.attach(self.control)
 
         self.setWindowTitle('RL')
         self.setStyleSheet(f"background-color: {BG_COLOUR};")
         self.root = QGridLayout()
         self.root.addWidget(self.env_view, 0, 0)
         self.root.addWidget(self.info.label, 0, 1)
-        self.root.addWidget(self.train_btn.btn, 1, 0)
-        self.root.addWidget(self.stop_btn.btn, 2, 0)
+        self.root.addWidget(self.ctrl_panel_wgt, 1, 0)
         self.setLayout(self.root)

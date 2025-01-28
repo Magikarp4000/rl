@@ -72,6 +72,9 @@ class SingleBuffer(list):
 
 
 class ReplayBuffer:
+    """
+    Double-buffer system for agent experience replay.
+    """
     def __init__(self):
         self._buf1 = SingleBuffer()
         self._buf2 = SingleBuffer()
