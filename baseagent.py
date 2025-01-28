@@ -47,7 +47,7 @@ class Agent(ABC, Observer):
         self.ep = 0
         self.glo_steps = 0
         self.replay = ReplayBuffer()
-
+        self.steps_list = []
         self.train_thread = None
         self.running = False
 
@@ -165,26 +165,21 @@ class Agent(ABC, Observer):
             return x
     
     def _train(self, n, maxstep, expstart, batch_size, display_graph):
-        steps_list = []
-        self.ep = 0
-        self.glo_steps = 0
-        self.active_buf = 0
-
         while self.ep < n:
             start_time = time.time()
             start_ep = self.ep
             while self.ep < min(n, start_ep + batch_size):
                 steps = self._train_episode(maxstep, expstart)
-                steps_list.append(steps)
+                self.steps_list.append(steps)
                 self.ep += 1
             end_time = time.time()
             if batch_size == 1:
                 print(f"Episode {self.ep} complete in {round(end_time - start_time, 3)}s", end=", ")
             else:
                 print(f"Episodes {start_ep + 1} - {self.ep} complete in {round(end_time - start_time, 3)}s", end=", ")
-            print(f"{np.mean(steps_list[self.ep - batch_size:])} steps avg.")
+            print(f"{np.mean(self.steps_list[self.ep - batch_size:])} steps avg.")
         if display_graph:
-            graph(steps_list, 'Episode', 'Num steps')
+            graph(self.steps_list, 'Episode', 'Num steps')
 
     def _train_episode(self, maxstep, expstart):
         s, a = self._init_state_action(expstart)
@@ -197,6 +192,8 @@ class Agent(ABC, Observer):
 
         while not (cmd.terminate or steps > maxstep):
             if not self.running:
+                self.replay.clear()
+                self.glo_steps -= steps
                 raise ThreadInterrupt()
             
             if not is_terminal:

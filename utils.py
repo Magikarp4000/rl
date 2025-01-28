@@ -96,6 +96,9 @@ class ReplayBuffer:
     def write(self, val):
         self._write.append(val)
     
+    def clear(self):
+        self._write.clear()
+    
     def create_new_ep(self, ep):
         if self._write is self._read and len(self._write) > 0:
             self._swap_write()

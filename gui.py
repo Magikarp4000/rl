@@ -63,7 +63,7 @@ class GuiLabel(Observer):
             ep_num = f"Episode: {obj.step.ep_num}"
             step_num = f"Step: {obj.step.step_num}"
             action = f"Action: {obj.step.a}"
-            self.label.setText(f"{ep_num}\n{step_num}\n{action}")
+            self.label.setText(f"Info:\n{ep_num}\n{step_num}\n{action}")
 
 
 class GuiButton(QPushButton):
@@ -111,7 +111,7 @@ class Gui(QWidget):
         self.control = control
 
         self.env_view = EnvView(self.control.scene)
-        self.info = GuiLabel("Info")
+        self.info = GuiLabel("Info:")
         self.train_btn = TrainButton()
         self.stop_btn = StopButton()
 

@@ -21,16 +21,5 @@ if __name__ == '__main__':
     )
     app = QApplication([])
     gui = Gui(agent, EnvControl(LBFScene(WIDTH, HEIGHT)))
-
-    # t1 = threading.Thread(
-    #     target=agent.train,
-    #     kwargs={'n': 1000, 'eps': Param(0.1), 'alpha': Param(0.01),
-    #             'batch_size': 1, 'display_graph': False},
-    #     daemon=True,
-    # )
-    # t1.start()
-
-    # gui.start()
-    # gui.animate()
     gui.show()
     app.exec()
