@@ -62,6 +62,7 @@ class LBFAgentDisplay(QGraphicsRectItem):
         self.setBrush(Qt.red)
         self.setRect(0, 0, size, size)
         self.setPos(x * size, y * size)
+        self.setZValue(1)
         self.size = size
     
     def update_pos(self, x, y):

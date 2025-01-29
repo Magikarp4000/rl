@@ -14,7 +14,7 @@ from gridenv import LBFScene
 if __name__ == '__main__':
     agent = NN(
         env=LBF(NUM_CELLS_X, NUM_CELLS_Y, NUM_ITEMS),
-        algo=QLearn(gamma=0.9, nstep=2),
+        algo=QLearn(gamma=0.9, nstep=20),
         netparams=NetParams([10], cost_type='mse'),
         batch=100,
         upd_interval=1000,

@@ -81,20 +81,25 @@ class ReplayBuffer:
         self._write = self._buf1
         self._read = self._buf1
         self._read_idx = 0
+        self._auto_sync = False
     
     def read(self):
         if self._read_idx < len(self._read):
             return self._get_data()
-        self._reset_read()
+        self.sync()
         if self._read:
             return self._get_data()
         return None
     
     def next(self):
-        if self._read_idx < len(self._read):
-            self._read_idx += 1
+        # print(self._auto_sync)
+        if self._auto_sync and not self._is_synced():
+            self.sync()
         else:
-            self._reset_read()
+            if self._read_idx < len(self._read):
+                self._read_idx += 1
+            else:
+                self.sync()
 
     def write(self, val):
         self._write.append(val)
@@ -103,23 +108,29 @@ class ReplayBuffer:
         self._write.clear()
     
     def create_new_ep(self, ep):
-        if self._write is self._read and len(self._write) > 0:
+        if self._is_synced() and len(self._write) > 0:
             self._swap_write()
         self._write.clear()
         self._write.set_ep(ep)
     
-    def _get_data(self):
-        return StepData(*self._read[self._read_idx], self._read_idx, self._read.ep)
-
-    def _reset_read(self):
+    def sync(self):
         self._read = self._write
         self._read_idx = 0
+    
+    def toggle_auto_sync(self):
+        self._auto_sync = not self._auto_sync
+    
+    def _get_data(self):
+        return StepData(*self._read[self._read_idx], self._read_idx, self._read.ep)
 
     def _swap_write(self):
         if self._write == self._buf1:
             self._write = self._buf2
         else:
             self._write = self._buf1
+    
+    def _is_synced(self):
+        return self._read == self._write
 
 
 def random_argmax(arr):
