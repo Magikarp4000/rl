@@ -4,7 +4,7 @@ import numpy as np
 
 from baseagent import Agent
 from envs import Env, DiscreteEnv
-from utils import VariableBuffer, fit_shape
+from utils import VariableBuffer, fit_shape, random_argmax
 
 from tilecoding import TileCoding
 from network import NetParams, Network
@@ -33,7 +33,7 @@ class TileCode(Agent):
 
 class NN(Agent):
     def __init__(self, env: Env, algo, netparams: NetParams=None,
-                 batch: int=20, upd_interval: int=100, buf_size: int=1000):
+                 batch=20, upd_interval=100, buf_size=1000):
         super().__init__(env, algo, ['batch', 'upd_interval', 'buf_size', 'bnn', 'tnn'])
         if netparams is not None:
             netparams.set_io(env.state_size(), env.num_actions(0))
@@ -49,8 +49,9 @@ class NN(Agent):
     
     def update(self, tgt, s, a):
         state = self.to_state(s)
-        output = self.action_vals_xnn(s, self.tnn)
+        output = self.action_vals_xnn(s, self.bnn)
         output[a] = tgt
+        # print(output)
         self.buffer.update((state, output))
         self.bnn.train(train_data=random.sample(self.buffer(), min(self.buffer.cur_size(), self.batch)),
                        epochs=1,
@@ -79,7 +80,7 @@ class NN(Agent):
         return self.action_vals_xnn(s, self.tnn)
     
     def best_bhv_action(self, s):
-        return np.argmax(self.action_vals_xnn(s, self.bnn))
+        return random_argmax(self.action_vals_xnn(s, self.bnn))
     
     def action_vals_xnn(self, s, xnn: Network):
         if s == self.env.T:

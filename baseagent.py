@@ -16,7 +16,7 @@ from utils import (
 )
 import data_transfer
 from envs import Env
-from params import Param
+from params import Param, UniformDecay
 
 from observer import Observer
 from rlsignal import RLSignal
@@ -48,7 +48,7 @@ class Agent(ABC, Observer):
         self.glo_steps = 0
         self.replay = ReplayBuffer()
         self.steps_list = []
-        self.train_thread = None
+        self.thread = None
         self.running = False
 
         self._config = config
@@ -57,16 +57,25 @@ class Agent(ABC, Observer):
     def respond(self, obj, signal):
         if signal == RLSignal.TRAIN_START:
             self.running = True
-            self.train_thread = threading.Thread(
+            self.thread = threading.Thread(
                 target=self.train,
-                kwargs={'n': 1000, 'eps': Param(0.1), 'alpha': Param(0.01),
+                kwargs={'n': 1000, 'eps': UniformDecay(0.2, 0.05, decay=5*10**-5), 'alpha': Param(0.01),
                         'batch_size': 1, 'display_graph': False},
                 daemon=True,
             )
-            self.train_thread.start()
-        elif signal == RLSignal.TRAIN_STOP:
+            self.thread.start()
+        elif signal == RLSignal.TEST_START:
+            self.running = True
+            self.thread = threading.Thread(
+                target=self.train,
+                kwargs={'n': 1000, 'eps': Param(1), 'alpha': Param(0),
+                        'batch_size': 1, 'display_graph': False},
+                daemon=True,
+            )
+            self.thread.start()
+        elif signal == RLSignal.STOP_SIMULATION:
             self.running = False
-            self.train_thread.join()
+            self.thread.join()
 
     def train(self, n, eps=Param(0.1), alpha=Param(0.1), maxstep=np.inf, expstart=False,
               batch_size=1, display_graph=True, save_params=True, save_time=True):
@@ -131,7 +140,7 @@ class Agent(ABC, Observer):
             return np.argmax(self.action_vals(s))
     
     def best_action_val(self, s):
-        return max(self.action_vals(s))
+        return np.max(self.action_vals(s))
     
     def action_prob(self, s, a):
         if s == self.env.T:
@@ -188,6 +197,7 @@ class Agent(ABC, Observer):
         cmd = Command()
         is_terminal = False
         steps = 0
+        cumr = 0
         self.replay.create_new_ep(self.ep + 1)
 
         while not (cmd.terminate or steps > maxstep):
@@ -199,11 +209,13 @@ class Agent(ABC, Observer):
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps())
+                cumr = 0.99 * cumr + r
                 if new_s == self.env.T:
                     is_terminal = True
-                self.replay.write((s, self.env.actions[a], r))
             
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
+            # print(cmd.tgt)
+            self.replay.write((s, a, r, cumr, self.action_vals_xnn(s, self.bnn).flat, cmd.tgt))
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
             self.eps.update(steps, self.glo_steps)

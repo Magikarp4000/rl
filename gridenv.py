@@ -18,8 +18,8 @@ class GridSquare(QGraphicsRectItem):
 
 
 class GridScene(EnvScene):
-    def __init__(self, width=400, height=250):
-        super().__init__(0, 0, width, height)
+    def __init__(self):
+        super().__init__()
         self.setBackgroundBrush(QBrush(Qt.black))
 
         self.grid_width = CELL_SIZE * NUM_CELLS_X
@@ -43,8 +43,8 @@ class GridScene(EnvScene):
 
 
 class LBFScene(GridScene):
-    def __init__(self, width=400, height=250):
-        super().__init__(width, height)
+    def __init__(self):
+        super().__init__()
         self.agent_disp = LBFAgentDisplay(0, 0, CELL_SIZE, self.cells)
         self.items_disp = [LBFItemDisplay(0, 0, CELL_SIZE, self.cells)
                            for _ in range(NUM_ITEMS)]
@@ -82,6 +82,17 @@ class LBFItemDisplay(QGraphicsRectItem):
 
     def update_existence(self, exist):
         self.setVisible(exist)
+
+
+class SnakeScene(GridScene):
+    def __init__(self):
+        super().__init__()
+        self.agent_disp = LBFAgentDisplay(0, 0, CELL_SIZE, self.cells)
+        self.item_disp = LBFItemDisplay(0, 0, CELL_SIZE, self.cells)
+
+    def update_state(self, agent_x, agent_y, item_x, item_y):
+        self.item_disp.update_pos(item_x, item_y)
+        self.agent_disp.update_pos(agent_x, agent_y)
 
 
 def run(agent):

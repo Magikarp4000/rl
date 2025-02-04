@@ -11,10 +11,13 @@ BLUE = (0, 0, 255)
 
 
 class StepData:
-    def __init__(self, s, a, r, step_num, ep_num):
+    def __init__(self, s, a, r, cumr, avals, tgt, step_num, ep_num):
         self.s = s
         self.a = a
         self.r = r
+        self.cumr = cumr
+        self.avals = avals
+        self.tgt = tgt
         self.step_num = step_num
         self.ep_num = ep_num
         self.sar = (self.s, self.a, self.r)
@@ -86,9 +89,6 @@ class ReplayBuffer:
     def read(self):
         if self._read_idx < len(self._read):
             return self._get_data()
-        self.sync()
-        if self._read:
-            return self._get_data()
         return None
     
     def next(self):
@@ -98,7 +98,7 @@ class ReplayBuffer:
         else:
             if self._read_idx < len(self._read):
                 self._read_idx += 1
-            else:
+            elif self._write.ep > self._read.ep:
                 self.sync()
 
     def write(self, val):

@@ -20,9 +20,9 @@ class Network(object):
         self.sizes = params.sizes
         self.num_layers = params.num_layers
         self.cost_type = params.cost_type
-        self.biases = [np.zeros((i, 1)) for i in self.sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
-        self.weights = [np.zeros((i, j)) for j, i in zip(self.sizes[:-1], self.sizes[1:])]
-    
+        self.biases = [0.1 * np.random.randn(i, 1) for i in self.sizes[1:]] # (i,1) to create column vector, (i) is 1D row vector
+        self.weights = [0.1 * np.random.randn(i, j) for j, i in zip(self.sizes[:-1], self.sizes[1:])]
+
     def get_params(self):
         return {'biases': self.tolist(self.biases), 'weights': self.tolist(self.weights)}
     
@@ -37,8 +37,9 @@ class Network(object):
         self.weights = copy.deepcopy(nn.weights)
     
     def feedforward(self, a):
-        for b, w in zip(self.biases, self.weights):
-            a = sigmoid(np.dot(w, a) + b)
+        for b, w in zip(self.biases[:-1], self.weights[:-1]):
+            a = relu(np.dot(w, a) + b)
+        a = np.dot(self.weights[-1], a) + self.biases[-1]
         return a
     
     def train(self, train_data, epochs, mini_batch_size, eta, test_data=None):
@@ -52,11 +53,11 @@ class Network(object):
 
         for epoch in range(epochs):
             # decompose inputs into random mini batches
-            random.shuffle(train_data)
-            mini_batches = [train_data[i:i+mini_batch_size] for i in range(0,n,mini_batch_size)]
+            # random.shuffle(train_data)
+            # mini_batches = [train_data[i:i+mini_batch_size] for i in range(0,n,mini_batch_size)]
             # train on each mini batch
-            for mini_batch in mini_batches:
-                self.update_mini_batch(mini_batch, eta)
+            # for mini_batch in mini_batches:
+            self.update_mini_batch(train_data, eta)
             
             # print results
             # if test_data is not None:
@@ -105,22 +106,28 @@ class Network(object):
         a = x # vector of input activations
         activations = [x]
         zs = []
-        for b, w in zip(self.biases, self.weights):
+        for b, w in zip(self.biases[:-1], self.weights[:-1]):
             z = np.dot(w, a) + b
             zs.append(z)
-            a = sigmoid(z)
+            a = relu(z)
             activations.append(a)
+        z = np.dot(self.weights[-1], z) + self.biases[-1]
+        zs.append(z)
+        # a = np.dot(self.weights[-1], a) + self.biases[-1]
+        a = z
+        activations.append(a)
         
         # calculate output layer errors
         # delta = error
-        delta = self.cost_deriv(activations[-1], y) * sigmoid_deriv(zs[-1])
+        delta = self.cost_deriv(activations[-1], y) * 1
+        # print(delta)
         # store gradients for output layer
         nabla_b[-1] = delta
         nabla_w[-1] = np.dot(delta, activations[-2].transpose())
 
         # backpropagate
         for layer in range(2, self.num_layers):
-            delta = np.dot(self.weights[-layer+1].transpose(), delta) * sigmoid_deriv(zs[-layer])
+            delta = np.dot(self.weights[-layer+1].transpose(), delta) * relu_deriv(zs[-layer])
             # store gradients for current layer
             nabla_b[-layer] = delta
             nabla_w[-layer] = np.dot(delta, activations[-layer-1].transpose())
@@ -152,12 +159,23 @@ def sigmoid(x):
 def sigmoid_deriv(x):
     return sigmoid(x) * (1.0 - sigmoid(x))
 
+def relu(x):
+    return x * (x > 0)
+
+def relu_deriv(x):
+    return 1 * (x > 0)
+
 # x = Network(NetParams([1,6,3], 'mse')).__str__()
 # print(x)
 # from data_transfer import *
-# save('bruh.json', x)
+# save('net.json', x)
 # import mnist_loader
 
 # tr_d, va_d, te_d = mnist_loader.load_data_wrapper()
 # net = Network([784, 30, 10], cost_type='mse')
 # net.train(tr_d, 30, 10, 3.0, test_data=te_d)
+if __name__ == '__main__':
+    nn = Network(NetParams([1,6,1], 'mse'))
+    print("before:", nn.feedforward(np.array([[2]])))
+    nn.train([(np.array([[2]]), np.array([[-1.5]])) for _ in range(200)], 1000, mini_batch_size=500, eta=0.01)
+    print("after:", nn.feedforward(np.array([[2]])))

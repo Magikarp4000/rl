@@ -6,14 +6,17 @@ from envs import ContinuousEnv
 
 
 class LBF(ContinuousEnv):
-    def __init__(self, w, h, num_items):
-        actions = ['U', 'D', 'L', 'R', 'C', 'X']
-        b_x = [[0, w - 1] for _ in range(num_items + 1)] # x-coord (+agent)
-        b_y = [[0, h - 1] for _ in range(num_items + 1)] # y-coord (+agent)
+    def __init__(self, w, h, num_items=1):
+        actions = ['X', 'U', 'D', 'L', 'R', 'C']
+        agent_x = [[0, w - 1]]
+        agent_y = [[0, h - 1]]
+        b_x = [[0, w - 1] for _ in range(num_items)] # x-coord (+agent)
+        b_y = [[0, h - 1] for _ in range(num_items)] # y-coord (+agent)
         b_exist = [[0, 1] for _ in range(num_items)] # item exists
+        sb = [[0, w - 1], [0, h - 1], [0, 0], [0, 0]]
         sb_exist = [[1, 1] for _ in range(num_items)]
-        bounds = b_x + b_y + b_exist
-        start_bounds = b_x + b_y + sb_exist
+        bounds = agent_x + agent_y + b_x + b_y + b_exist
+        start_bounds = agent_x + agent_y + b_x + b_y + sb_exist
         super().__init__(actions, bounds, start_bounds)
         
         self.w = w
@@ -38,7 +41,7 @@ class LBF(ContinuousEnv):
             for x, y in self.move_map.values():
                 for i, (i_x, i_y) in enumerate(zip(items_x, items_y)):
                     if (agent_x + x, agent_y + y) == (i_x, i_y) and item_exists[i]:
-                        reward += 10
+                        reward += 100
                         new_item_exists[i] = 0
         else:
             agent_x = np.clip(agent_x + self.move_map[self.actions[a]][0], 0, self.w - 1)

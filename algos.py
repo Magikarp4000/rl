@@ -188,8 +188,8 @@ class ExploreBonus(Algo):
         self._last_visit = {}
     
     def __call__(self, agent, s, a, r, new_s, new_a, t, is_terminal):
-        r += self.kappa * np.sqrt(t - self.last_visit(s, a))
-        self._last_visit[(s, a)] = t
+        r += self.kappa * np.sqrt(t - self.last_visit(tuple(s), a))
+        self._last_visit[(tuple(s), a)] = t
         return self.algo(agent, s, a, r, new_s, new_a, t, is_terminal)
 
     def last_visit(self, s, a):
