@@ -25,7 +25,9 @@ class EnvControl(Observable, Observer, AgentObserver):
             self.aval = self.agent.q(self.step.s, self.step.a)
             # self.avals = self.agent.action_vals_xnn(self.step.s, self.agent.bnn).flat
             self.update_state(*self.step.sar)
-            self.notify(RLSignal.EP_UPDATE)
+            if self.step.step_num == 0:
+                self.notify(RLSignal.VIEW_NEW_EP)
+            self.notify(RLSignal.VIEW_UPDATE)
         self.agent.replay.next()
         
     def update_state(self, s, a, r):

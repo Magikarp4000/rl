@@ -1,4 +1,6 @@
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 from imports import *
 
@@ -10,15 +12,25 @@ from agentobserver import AgentObserver
 from rlsignal import RLSignal
 
 
+class Clock(Observable):
+    def __init__(self):
+        super().__init__()
+        self._clock = QTimer()
+        self._clock.timeout.connect(lambda: self.notify(RLSignal.CLOCK_UPDATE))
+    
+    def start(self):
+        self._clock.start()
+
+
 class EnvScene(QGraphicsScene):
     def update_state(self, *args, **kwargs):
         pass
 
 
 class EnvView(QGraphicsView):
-    def __init__(self, scene: EnvScene):
+    def __init__(self, scene: EnvScene, width=0, height=0):
         super().__init__(scene)
-        self.setFixedSize(WIDTH, HEIGHT)
+        self.setFixedSize(width, height)
         self.scene().setParent(self)
         self.setMouseTracking(True)
         self.viewport().installEventFilter(self)
@@ -34,7 +46,7 @@ class EnvView(QGraphicsView):
 
 
 class GuiObject(Observer, Observable):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
         self._wgt = None
     
@@ -46,10 +58,11 @@ class GuiObject(Observer, Observable):
 
 
 class GuiLabel(GuiObject, AgentObserver):
-    def __init__(self, text=None):
+    def __init__(self, text=None, width=0):
         super().__init__()
         self.label = QLabel(text)
         self.label.setStyleSheet("color: white; font-size: 14pt")
+        self.label.setFixedWidth(width)
         self.upd_text = ""
         self.env_text = ""
         self.set_widget(self.label)
@@ -57,7 +70,7 @@ class GuiLabel(GuiObject, AgentObserver):
     def respond(self, obj, signal):
         if signal == RLSignal.CLOCK_UPDATE:
             self.upd_text = f"Global step: {self.agent.glo_steps}"
-        elif signal == RLSignal.EP_UPDATE:
+        elif signal == RLSignal.VIEW_UPDATE:
             ep_num = f"Episode: {obj.step.ep_num}"
             step_num = f"Step: {obj.step.step_num}"
             action = f"Action: {obj.action}"
@@ -179,14 +192,40 @@ class FPSSlider(GuiObject):
         self.notify(RLSignal.FPS_CHANGE)
 
 
-class Clock(Observable):
-    def __init__(self):
+class GuiGraph(GuiObject):
+    def __init__(self, width=0, height=0):
         super().__init__()
-        self._clock = QTimer()
-        self._clock.timeout.connect(lambda: self.notify(RLSignal.CLOCK_UPDATE))
+
+        dpi = plt.rcParams['figure.dpi']
+        self.fig = Figure(figsize=(width / dpi, height / dpi))
+        self.fig.set_facecolor(BG_COLOUR)
+
+        self.ax = self.fig.add_subplot()
+        self.ax.spines['left'].set_color('white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['right'].set_alpha(0)
+        self.ax.spines['top'].set_alpha(0)
+        self.ax.xaxis.label.set_color('white')
+        self.ax.yaxis.label.set_color('white')
+        self.ax.tick_params(axis='x', colors='white', labelsize=8)
+        self.ax.tick_params(axis='y', colors='white', labelsize=8)
+        self.ax.set_facecolor(BG_COLOUR)
+
+        self.graph = FigureCanvasQTAgg(self.fig)
+        self.set_widget(self.graph)
+
+        self.prev = None
     
-    def start(self):
-        self._clock.start()
+    def respond(self, obj: EnvControl, signal):
+        if signal == RLSignal.VIEW_UPDATE:
+            cur = obj.aval
+            t = obj.step.step_num
+            if t > 0:
+                self.ax.plot([t-1, t], [self.prev, cur], color='white')
+                self.fig.canvas.draw()
+            self.prev = cur
+        elif signal == RLSignal.VIEW_NEW_EP:
+            self.ax.clear()
 
 
 class Gui(QWidget, Observer):
@@ -195,8 +234,10 @@ class Gui(QWidget, Observer):
         self.agent = agent
         self.scene = scene
 
-        self.env_view = EnvView(self.scene)
+        width, height = self.screen().size().toTuple()
+        self.view = EnvView(self.scene, width / 2, height * 3 / 5)
         self.control = EnvControl(self.scene)
+
         self.train_btn = TrainButton()
         self.test_btn = TestButton()
         self.stop_btn = StopButton()
@@ -214,7 +255,7 @@ class Gui(QWidget, Observer):
         self.ctrl_panel.addWidget(self.fpsslider.widget(), 0, 4)
         self.ctrl_panel.setAlignment(Qt.AlignLeft)
 
-        self.info = GuiLabel("Info:")
+        self.info = GuiLabel("Info:", width / 6)
 
         self.side_panel_wgt = QWidget()
         self.side_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -222,10 +263,18 @@ class Gui(QWidget, Observer):
         self.side_panel.addWidget(self.info.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
+        self.action_graph = GuiGraph(350, 350)
+        self.graph_panel_wgt = QWidget()
+        self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.graph_panel = QGridLayout(self.graph_panel_wgt)
+        self.graph_panel.addWidget(self.action_graph.widget())
+        self.graph_panel.setAlignment(Qt.AlignTop)
+
         self.control.observe(agent)
         self.info.observe(agent)
 
         self.control.attach(self.info)
+        self.control.attach(self.action_graph)
 
         self.train_btn.attach(self.stop_btn)
         self.train_btn.attach(self.test_btn)
@@ -251,9 +300,10 @@ class Gui(QWidget, Observer):
         self.setWindowTitle('RL')
         self.setStyleSheet(f"background-color: {BG_COLOUR};")
         self.root = QGridLayout()
-        self.root.addWidget(self.env_view, 0, 0)
+        self.root.addWidget(self.view, 0, 0)
         self.root.addWidget(self.ctrl_panel_wgt, 1, 0)
         self.root.addWidget(self.side_panel_wgt, 0, 1)
+        self.root.addWidget(self.graph_panel_wgt, 0, 2)
         self.root.setAlignment(Qt.AlignLeft)
         self.setLayout(self.root)
 
@@ -267,4 +317,4 @@ class Gui(QWidget, Observer):
     
     # def respond(self, obj, signal):
     #     if signal == RLSignal.CLOCK_UPDATE:
-    #         print(self.env_view.size())
+    #         print(self.view.size())
