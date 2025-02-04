@@ -1,6 +1,7 @@
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+import numpy as np
 
 from imports import *
 
@@ -201,12 +202,12 @@ class GuiGraph(GuiObject):
         self.fig.set_facecolor(BG_COLOUR)
 
         self.ax = self.fig.add_subplot()
+        self.ax.set_xlabel("Steps", color='white')
+        self.ax.set_ylabel("Action-Value", color='white')
         self.ax.spines['left'].set_color('white')
         self.ax.spines['bottom'].set_color('white')
         self.ax.spines['right'].set_alpha(0)
         self.ax.spines['top'].set_alpha(0)
-        self.ax.xaxis.label.set_color('white')
-        self.ax.yaxis.label.set_color('white')
         self.ax.tick_params(axis='x', colors='white', labelsize=8)
         self.ax.tick_params(axis='y', colors='white', labelsize=8)
         self.ax.set_facecolor(BG_COLOUR)
@@ -221,7 +222,11 @@ class GuiGraph(GuiObject):
             cur = obj.aval
             t = obj.step.step_num
             if t > 0:
-                self.ax.plot([t-1, t], [self.prev, cur], color='white')
+                lines = self.ax.get_lines()
+                if len(lines) >= 100:
+                    self.ax.get_lines()[0].remove()
+                    self.ax.set_xlim(t - 99, t)
+                self.ax.plot([t-1, t], [self.prev, cur], color='white', lw=1)
                 self.fig.canvas.draw()
             self.prev = cur
         elif signal == RLSignal.VIEW_NEW_EP:
@@ -263,7 +268,7 @@ class Gui(QWidget, Observer):
         self.side_panel.addWidget(self.info.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
-        self.action_graph = GuiGraph(350, 350)
+        self.action_graph = GuiGraph(400, 400)
         self.graph_panel_wgt = QWidget()
         self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.graph_panel = QGridLayout(self.graph_panel_wgt)
