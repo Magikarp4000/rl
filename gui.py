@@ -77,7 +77,7 @@ class GuiLabel(GuiObject, AgentObserver):
             t = f"Step: {step['t']}"
             action = f"Action: {step['action']}"
             r = f"Reward: {round(step['r'], 3)}"
-            avals = "Action-Values:"+"\n".join([str(round(x, 3)) for x in step['avals']])
+            avals = "Action-Values:\n"+"\n".join([str(round(x, 3)) for x in step['avals']])
             tgt = f"Target-Value: {round(step['cmd'].tgt, 3)}"
             self.env_text = f"{ep}\n{t}\n{action}\n{r}\n{tgt}\n{avals}"
         self._update_text()
@@ -248,6 +248,7 @@ class CurActionValGraph(GuiGraph):
             self.prev = aval
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
+            self.num_dash = 0
 
 
 class ActionValsGraph(GuiGraph):
@@ -271,6 +272,7 @@ class ActionValsGraph(GuiGraph):
             self.prevs = avals.copy()
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
+            self.num_dash = 0
 
 
 class Gui(QWidget, Observer):
@@ -308,8 +310,8 @@ class Gui(QWidget, Observer):
         self.side_panel.addWidget(self.info.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
-        self.curaval_graph = CurActionValGraph(380, 380)
-        self.avals_graph = ActionValsGraph(380, 380)
+        self.curaval_graph = CurActionValGraph(380, 380, window=40)
+        self.avals_graph = ActionValsGraph(380, 380, window=40)
         self.graph_panel_wgt = QWidget()
         self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.graph_panel = QGridLayout(self.graph_panel_wgt)

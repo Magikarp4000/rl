@@ -1,4 +1,5 @@
 from imports import *
+from exceptions import *
 
 from observer import Observable, Observer
 from agentobserver import AgentObserver
@@ -24,7 +25,7 @@ class EnvControl(Observable, Observer, AgentObserver):
             if self.step['t'] == 0:
                 self.notify(RLSignal.VIEW_NEW_EP)
             self.notify(RLSignal.VIEW_UPDATE)
-        except IndexError:
+        except BufferIndexError:
             pass
         self.agent.replay.next()
         

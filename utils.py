@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as pl
+from exceptions import *
 
 
 BLACK = (0, 0, 0)
@@ -88,10 +89,9 @@ class ReplayBuffer:
     
     def read(self):
         if self._read_idx < len(self._read):
-            # print(self._read[self._read_idx].t)
             return self._read[self._read_idx]
         else:
-            raise IndexError()
+            raise BufferIndexError()
     
     def read_ep(self):
         return self._read.ep
@@ -125,13 +125,13 @@ class ReplayBuffer:
         self._auto_sync = not self._auto_sync
 
     def _swap_write(self):
-        if self._write == self._buf1:
+        if self._write is self._buf1:
             self._write = self._buf2
         else:
             self._write = self._buf1
     
     def _is_synced(self):
-        return self._read == self._write
+        return self._read is self._write
 
 
 def random_argmax(arr):
