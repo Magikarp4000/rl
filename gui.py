@@ -3,7 +3,6 @@ import threading
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-import numpy as np
 
 from imports import *
 
@@ -13,6 +12,8 @@ from envcontrol import EnvControl
 from observer import Observer, Observable
 from agentobserver import AgentObserver
 from rlsignal import RLSignal
+
+import time
 
 
 class Clock(Observable):
@@ -195,13 +196,10 @@ class GuiLabel(GuiObject, AgentObserver):
 
 
 class GuiGraph(GuiObject):
-    def __init__(self, width=0, height=0, window=100, ypad=0.2, num_lines=1):
+    def __init__(self, width=0, height=0, window=100, ypad=0.2):
         super().__init__()
         self.window = window
         self.ypad = ypad
-
-        self.num_lines = num_lines
-        self.num_dash = 0
 
         dpi = plt.rcParams['figure.dpi']
         self.fig = Figure(figsize=(width / dpi, height / dpi))
@@ -219,13 +217,18 @@ class GuiGraph(GuiObject):
         self.graph = FigureCanvasQTAgg(self.fig)
         self.set_widget(self.graph)
 
-        self._wait = False
+        self.t1 = threading.Thread()
 
     def slide(self, t):
-        if self.num_dash >= self.window:
-            for _ in range(self.num_lines):
-                self.ax.get_lines()[0].remove()
-            self.num_dash -= 1
+        return
+        lines = self.ax.get_lines()
+        if lines and lines[-1].get_xdata()[1] >= t:
+            # print(self.ax.get_lines())
+            # while self.ax.get_lines() and self.ax.get_lines()[0].get_xdata()[0] < t - self.window + 1:
+            #     self.ax.get_lines()
+            #     self.ax.get_lines()[0].remove()
+            # for _ in range(self.num_lines):
+            #     self.ax.get_lines()[0].remove()
             self.ax.set_xlim(t - self.window + 1, t)
             data = [dash.get_data()[1][1] for dash in self.ax.get_lines()]
             mi, ma = min(data), max(data)
@@ -235,13 +238,11 @@ class GuiGraph(GuiObject):
     def respond(self, obj, signal):
         if signal == RLSignal.VIEW_UPDATE:
             self.view_update(obj.step)
-            if not self._wait:
-                self._wait = True
-                t1 =  threading.Thread(target=self._draw, daemon=True)
-                t1.start()
+            if not self.t1.is_alive():
+                self.t1 = threading.Thread(target=self._draw, daemon=True)
+                self.t1.start()
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
-            self.num_dash = 0
             self.new_ep(obj)
         elif signal == RLSignal.TRAIN_START:
             self.train_start(obj)
@@ -249,8 +250,8 @@ class GuiGraph(GuiObject):
             self.update(obj, signal)
     
     def _draw(self):
+        time.sleep(0.002)
         self.fig.canvas.draw()
-        self._wait = False
     
     def view_update(self, step): pass
     def update(self, obj, signal): pass
@@ -270,7 +271,6 @@ class CurActionValGraph(GuiGraph):
         if step.t > 0:
             self.slide(step.t)
             self.ax.plot([step.t - 1, step.t], [self.prev, aval], color='white', lw=1)
-            self.num_dash += 1
         self.prev = aval
 
 
@@ -283,13 +283,11 @@ class ActionValsGraph(GuiGraph):
         self.colours = None
     
     def view_update(self, step):
-        self.num_lines = len(step.avals)
         if step.t > 0:
             self.slide(step.t)
             for prev, col, aval, action in zip(self.prevs,  self.colours, step.avals, step.actions):
                 self.ax.plot([step.t - 1, step.t], [prev, aval],
-                                color=col, lw=1, label=action)
-            self.num_dash += 1
+                              color=col, lw=1, label=action)
         self.prevs = step.avals.copy()
     
     def train_start(self, obj):
@@ -335,12 +333,12 @@ class Gui(QWidget):
         self.side_panel.addWidget(self.info.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
-        self.curaval_graph = CurActionValGraph(380, 380, window=100)
+        # self.curaval_graph = CurActionValGraph(380, 380, window=100)
         self.avals_graph = ActionValsGraph(380, 380, window=100)
         self.graph_panel_wgt = QWidget()
         self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.graph_panel = QGridLayout(self.graph_panel_wgt)
-        self.graph_panel.addWidget(self.curaval_graph.widget(), 0, 0)
+        # self.graph_panel.addWidget(self.curaval_graph.widget(), 0, 0)
         self.graph_panel.addWidget(self.avals_graph.widget(), 1, 0)
         self.graph_panel.setAlignment(Qt.AlignTop)
 
@@ -350,7 +348,7 @@ class Gui(QWidget):
         self.agent.attach(self.avals_graph)
 
         self.control.attach(self.info)
-        self.control.attach(self.curaval_graph)
+        # self.control.attach(self.curaval_graph)
         self.control.attach(self.avals_graph)
 
         self.train_btn.attach(self.stop_btn)
