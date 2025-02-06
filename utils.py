@@ -88,11 +88,15 @@ class ReplayBuffer:
     
     def read(self):
         if self._read_idx < len(self._read):
-            return self._get_data()
-        return None
+            # print(self._read[self._read_idx].t)
+            return self._read[self._read_idx]
+        else:
+            raise IndexError()
+    
+    def read_ep(self):
+        return self._read.ep
     
     def next(self):
-        # print(self._auto_sync)
         if self._auto_sync and not self._is_synced():
             self.sync()
         else:
@@ -119,9 +123,6 @@ class ReplayBuffer:
     
     def toggle_auto_sync(self):
         self._auto_sync = not self._auto_sync
-    
-    def _get_data(self):
-        return StepData(*self._read[self._read_idx], self._read_idx, self._read.ep)
 
     def _swap_write(self):
         if self._write == self._buf1:

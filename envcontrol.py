@@ -10,24 +10,22 @@ class EnvControl(Observable, Observer, AgentObserver):
         super().__init__()
         self.scene = scene
         self.step = None
-        self.action = None
-        self.aval = None
-        self.avals = None
+        self.ep = None
 
         self.fps = FPS
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
     
     def update(self):
-        self.step = self.agent.replay.read()
-        if self.step != None:
-            self.action = self.agent.env.actions[self.step.a]
-            self.aval = self.agent.q(self.step.s, self.step.a)
-            # self.avals = self.agent.action_vals_xnn(self.step.s, self.agent.bnn).flat
-            self.update_state(*self.step.sar)
-            if self.step.step_num == 0:
+        try:
+            self.step = self.agent.replay.read()
+            self.ep = self.agent.replay.read_ep()
+            self.update_state(self.step['s'], self.step['a'], self.step['r'])
+            if self.step['t'] == 0:
                 self.notify(RLSignal.VIEW_NEW_EP)
             self.notify(RLSignal.VIEW_UPDATE)
+        except IndexError:
+            pass
         self.agent.replay.next()
         
     def update_state(self, s, a, r):

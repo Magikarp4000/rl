@@ -36,7 +36,7 @@ class Command:
 
 
 class Agent(ABC, Observer):
-    def __init__(self, env: Env, algo, config=[]):
+    def __init__(self, env: Env, algo, extracter=None, config=[]):
         super().__init__()
         self.env = env
         self.algo = algo
@@ -48,6 +48,7 @@ class Agent(ABC, Observer):
         self.glo_steps = 0
         self.replay = ReplayBuffer()
         self.steps_list = []
+        self._extracter = extracter
         self.thread = None
         self.running = False
 
@@ -130,6 +131,12 @@ class Agent(ABC, Observer):
     def best_bhv_action(self, s):
         return self.best_action(s)
     
+    def bhv_action_vals(self, s):
+        return self.action_vals(s)
+    
+    def best_bhv_action_val(self, s):
+        return self.best_action_val(s)
+    
     def action_vals(self, s):
         return [self.q(s, a) for a in self.env.action_spec(s)]
 
@@ -197,7 +204,6 @@ class Agent(ABC, Observer):
         cmd = Command()
         is_terminal = False
         steps = 0
-        cumr = 0
         self.replay.create_new_ep(self.ep + 1)
 
         while not (cmd.terminate or steps > maxstep):
@@ -209,13 +215,13 @@ class Agent(ABC, Observer):
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps())
-                cumr = 0.99 * cumr + r
                 if new_s == self.env.T:
                     is_terminal = True
             
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
-            # print(cmd.tgt)
-            self.replay.write((s, a, r, cumr, self.action_vals_xnn(s, self.bnn).flat, cmd.tgt))
+            data = self._extracter.extract(self, s, a, r, new_a, new_s, steps, cmd)
+            self.replay.write(data)
+            
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
             self.eps.update(steps, self.glo_steps)

@@ -72,15 +72,14 @@ class GuiLabel(GuiObject, AgentObserver):
         if signal == RLSignal.CLOCK_UPDATE:
             self.upd_text = f"Global step: {self.agent.glo_steps}"
         elif signal == RLSignal.VIEW_UPDATE:
-            ep_num = f"Episode: {obj.step.ep_num}"
-            step_num = f"Step: {obj.step.step_num}"
-            action = f"Action: {obj.action}"
-            reward = f"Reward: {round(obj.step.r, 3)}"
-            cumr = f"Cumr: {round(obj.step.cumr, 3)}"
-            aval = f"Action-Value: {round(obj.aval, 6)}"
-            avals = "\n".join([str(round(x, 3)) for x in obj.step.avals])
-            tgt = f"Target-Value: {round(obj.step.tgt, 3)}"
-            self.env_text = f"{ep_num}\n{step_num}\n{action}\n{cumr}\n{reward}\n{tgt}\nAction-Values:\n{avals}"
+            step = obj.step
+            ep = f"Episode: {obj.ep}"
+            t = f"Step: {step['t']}"
+            action = f"Action: {step['action']}"
+            r = f"Reward: {round(step['r'], 3)}"
+            avals = "Action-Values:"+"\n".join([str(round(x, 3)) for x in step['avals']])
+            tgt = f"Target-Value: {round(step['cmd'].tgt, 3)}"
+            self.env_text = f"{ep}\n{t}\n{action}\n{r}\n{tgt}\n{avals}"
         self._update_text()
     
     def _update_text(self):
@@ -194,16 +193,19 @@ class FPSSlider(GuiObject):
 
 
 class GuiGraph(GuiObject):
-    def __init__(self, width=0, height=0):
+    def __init__(self, width=0, height=0, window=100, ypad=0.2, num_lines=1):
         super().__init__()
+        self.window = window
+        self.ypad = ypad
+
+        self.num_lines = num_lines
+        self.num_dash = 0
 
         dpi = plt.rcParams['figure.dpi']
         self.fig = Figure(figsize=(width / dpi, height / dpi))
         self.fig.set_facecolor(BG_COLOUR)
 
         self.ax = self.fig.add_subplot()
-        self.ax.set_xlabel("Steps", color='white')
-        self.ax.set_ylabel("Action-Value", color='white')
         self.ax.spines['left'].set_color('white')
         self.ax.spines['bottom'].set_color('white')
         self.ax.spines['right'].set_alpha(0)
@@ -214,21 +216,59 @@ class GuiGraph(GuiObject):
 
         self.graph = FigureCanvasQTAgg(self.fig)
         self.set_widget(self.graph)
+    
+    def slide(self, t):
+        if self.num_dash >= self.window:
+            for _ in range(self.num_lines):
+                self.ax.get_lines()[0].remove()
+            self.num_dash -= 1
+            self.ax.set_xlim(t - self.window + 1, t)
+            data = [dash.get_data()[1][1] for dash in self.ax.get_lines()]
+            mi, ma = min(data), max(data)
+            ra = ma - mi
+            self.ax.set_ylim(mi - ra * self.ypad, ma + ra * self.ypad)
 
+
+class CurActionValGraph(GuiGraph):
+    def __init__(self, width=0, height=0, window=100, ypad=0.2):
+        super().__init__(width, height, window, ypad)
+        self.ax.set_xlabel("Steps", color='white')
+        self.ax.set_ylabel("Action-Value", color='white')
         self.prev = None
     
     def respond(self, obj: EnvControl, signal):
         if signal == RLSignal.VIEW_UPDATE:
-            cur = obj.aval
-            t = obj.step.step_num
-            if t > 0:
-                lines = self.ax.get_lines()
-                if len(lines) >= 100:
-                    self.ax.get_lines()[0].remove()
-                    self.ax.set_xlim(t - 99, t)
-                self.ax.plot([t-1, t], [self.prev, cur], color='white', lw=1)
+            step = obj.step
+            aval = step['avals'][step['a']]
+            if step['t'] > 0:
+                self.slide(step['t'])
+                self.ax.plot([step['t'] - 1, step['t']], [self.prev, aval], color='white', lw=1)
+                self.num_dash += 1
                 self.fig.canvas.draw()
-            self.prev = cur
+            self.prev = aval
+        elif signal == RLSignal.VIEW_NEW_EP:
+            self.ax.clear()
+
+
+class ActionValsGraph(GuiGraph):
+    def __init__(self, width=0, height=0, window=100, ypad=0.2, num_lines=1):
+        super().__init__(width, height, window, ypad, num_lines)
+        self.ax.set_xlabel("Steps", color='white')
+        self.ax.set_ylabel("Action-Values", color='white')
+        self.prevs = None
+    
+    def respond(self, obj: EnvControl, signal):
+        if signal == RLSignal.VIEW_UPDATE:
+            step = obj.step
+            avals = step['avals']
+            self.num_lines = len(avals)
+            if step['t'] > 0:
+                self.slide(step['t'])
+                for prev, aval in zip(self.prevs, avals):
+                    self.ax.plot([step['t'] - 1, step['t']], [prev, aval], color='white', lw=1)
+                self.num_dash += 1
+                self.fig.canvas.draw()
+            self.prevs = avals.copy()
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
 
@@ -260,7 +300,7 @@ class Gui(QWidget, Observer):
         self.ctrl_panel.addWidget(self.fpsslider.widget(), 0, 4)
         self.ctrl_panel.setAlignment(Qt.AlignLeft)
 
-        self.info = GuiLabel("Info:", width / 6)
+        self.info = GuiLabel("Info:", width / 7.5)
 
         self.side_panel_wgt = QWidget()
         self.side_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -268,18 +308,21 @@ class Gui(QWidget, Observer):
         self.side_panel.addWidget(self.info.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
-        self.action_graph = GuiGraph(400, 400)
+        self.curaval_graph = CurActionValGraph(380, 380)
+        self.avals_graph = ActionValsGraph(380, 380)
         self.graph_panel_wgt = QWidget()
         self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.graph_panel = QGridLayout(self.graph_panel_wgt)
-        self.graph_panel.addWidget(self.action_graph.widget())
+        self.graph_panel.addWidget(self.curaval_graph.widget(), 0, 0)
+        self.graph_panel.addWidget(self.avals_graph.widget(), 1, 0)
         self.graph_panel.setAlignment(Qt.AlignTop)
 
         self.control.observe(agent)
         self.info.observe(agent)
 
         self.control.attach(self.info)
-        self.control.attach(self.action_graph)
+        self.control.attach(self.curaval_graph)
+        self.control.attach(self.avals_graph)
 
         self.train_btn.attach(self.stop_btn)
         self.train_btn.attach(self.test_btn)
