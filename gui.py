@@ -1,3 +1,5 @@
+import threading
+
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
@@ -216,7 +218,9 @@ class GuiGraph(GuiObject):
 
         self.graph = FigureCanvasQTAgg(self.fig)
         self.set_widget(self.graph)
-    
+
+        self._wait = False
+
     def slide(self, t):
         if self.num_dash >= self.window:
             for _ in range(self.num_lines):
@@ -227,6 +231,31 @@ class GuiGraph(GuiObject):
             mi, ma = min(data), max(data)
             ra = ma - mi
             self.ax.set_ylim(mi - ra * self.ypad, ma + ra * self.ypad)
+    
+    def respond(self, obj, signal):
+        if signal == RLSignal.VIEW_UPDATE:
+            self.view_update(obj.step)
+            if not self._wait:
+                self._wait = True
+                t1 =  threading.Thread(target=self._draw, daemon=True)
+                t1.start()
+        elif signal == RLSignal.VIEW_NEW_EP:
+            self.ax.clear()
+            self.num_dash = 0
+            self.new_ep(obj)
+        elif signal == RLSignal.TRAIN_START:
+            self.train_start(obj)
+        else:
+            self.update(obj, signal)
+    
+    def _draw(self):
+        self.fig.canvas.draw()
+        self._wait = False
+    
+    def view_update(self, step): pass
+    def update(self, obj, signal): pass
+    def new_ep(self, obj): pass
+    def train_start(self, obj): pass
 
 
 class CurActionValGraph(GuiGraph):
@@ -236,20 +265,13 @@ class CurActionValGraph(GuiGraph):
         self.ax.set_ylabel("Action-Value", color='white')
         self.prev = None
     
-    def respond(self, obj: EnvControl, signal):
-        if signal == RLSignal.VIEW_UPDATE:
-            step = obj.step
-            aval = step.avals[step.a]
-            if step.t > 0:
-                self.slide(step.t)
-                self.ax.plot([step.t - 1, step.t], [self.prev, aval], color='white', lw=1)
-                self.num_dash += 1
-                self.fig.canvas.draw()
-            self.prev = aval
-        
-        elif signal == RLSignal.VIEW_NEW_EP:
-            self.ax.clear()
-            self.num_dash = 0
+    def view_update(self, step):
+        aval = step.avals[step.a]
+        if step.t > 0:
+            self.slide(step.t)
+            self.ax.plot([step.t - 1, step.t], [self.prev, aval], color='white', lw=1)
+            self.num_dash += 1
+        self.prev = aval
 
 
 class ActionValsGraph(GuiGraph):
@@ -260,29 +282,22 @@ class ActionValsGraph(GuiGraph):
         self.prevs = None
         self.colours = None
     
-    def respond(self, obj, signal):
-        if signal == RLSignal.TRAIN_START:
-            self.ax.clear()
-            self.colours = [
-                self.ax.plot([], [], label=action)[0].get_color() for action in obj.env.actions
-            ]
-            self.fig.legend()
-        
-        elif signal == RLSignal.VIEW_UPDATE:
-            step = obj.step
-            self.num_lines = len(step.avals)
-            if step.t > 0:
-                self.slide(step.t)
-                for prev, col, aval, action in zip(self.prevs,  self.colours, step.avals, step.actions):
-                    self.ax.plot([step.t - 1, step.t], [prev, aval],
-                                 color=col, lw=1, label=action)                
-                self.num_dash += 1
-                self.fig.canvas.draw()
-            self.prevs = step.avals.copy()
-        
-        elif signal == RLSignal.VIEW_NEW_EP:
-            self.ax.clear()
-            self.num_dash = 0
+    def view_update(self, step):
+        self.num_lines = len(step.avals)
+        if step.t > 0:
+            self.slide(step.t)
+            for prev, col, aval, action in zip(self.prevs,  self.colours, step.avals, step.actions):
+                self.ax.plot([step.t - 1, step.t], [prev, aval],
+                                color=col, lw=1, label=action)
+            self.num_dash += 1
+        self.prevs = step.avals.copy()
+    
+    def train_start(self, obj):
+        self.ax.clear()
+        self.colours = [
+            self.ax.plot([], [], label=action)[0].get_color() for action in obj.env.actions
+        ]
+        self.fig.legend()
 
 
 class Gui(QWidget):

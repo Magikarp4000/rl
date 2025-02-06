@@ -64,6 +64,7 @@ class Agent(ABC, Observable, Observer):
                         'batch_size': 1, 'display_graph': False},
                 daemon=True,
             )
+            self.notify(RLSignal.TRAIN_START)
             self.thread.start()
         elif signal == RLSignal.TEST_CLICKED:
             self.running = True
@@ -75,6 +76,7 @@ class Agent(ABC, Observable, Observer):
             )
             self.thread.start()
         elif signal == RLSignal.STOP_SIMULATION:
+            self.notify(RLSignal.TRAIN_END)
             self.running = False
             self.thread.join()
 
@@ -86,14 +88,12 @@ class Agent(ABC, Observable, Observer):
         if save_params:
             self._save_params(n, eps, expstart)
         
-        self.notify(RLSignal.TRAIN_START)
         start_time = time.time()
         try:
             self._train(n, maxstep, expstart, batch_size, display_graph)
         except ThreadInterrupt:
             return
         end_time = time.time()
-        self.notify(RLSignal.TRAIN_END)
 
         if save_time:
             self._config_meta({'duration': str(end_time - start_time)})
