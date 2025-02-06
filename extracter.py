@@ -1,22 +1,26 @@
+import inspect
 from baseagent import Agent, Command
+
+
+class StepData:
+    def __init__(self, **kwargs):
+        self.update(**kwargs)
+    
+    def update(self, **kwargs):
+        for name, val in kwargs.items():
+            setattr(self, name, val)
 
 
 class Extracter:
     def extract(self, agent: Agent, s, a, r, new_a, new_s, t, cmd: Command):
-        data = {}
-        data['s'] = s
-        data['a'] = a
-        data['r'] = r
-        data['new_a'] = new_a
-        data['new_s'] = new_s
-        data['t'] = t
-        data['cmd'] = cmd
-        return data
+        return StepData(a=a, s=s, r=r, new_s=new_s, new_a=new_a, t=t, cmd=cmd)
 
 
 class ExtracterPlus(Extracter):
     def extract(self, agent, s, a, r, new_a, new_s, t, cmd):
         data = super().extract(agent, s, a, r, new_a, new_s, t, cmd)
-        data['avals'] = agent.bhv_action_vals(s).flat
-        data['action'] = agent.env.actions[a]
+        data.update(
+            avals = agent.bhv_action_vals(s).flat,
+            action = agent.env.actions[a]
+        )
         return data

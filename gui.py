@@ -58,34 +58,6 @@ class GuiObject(Observer, Observable):
         return self._wgt
 
 
-class GuiLabel(GuiObject, AgentObserver):
-    def __init__(self, text=None, width=0):
-        super().__init__()
-        self.label = QLabel(text)
-        self.label.setStyleSheet("color: white; font-size: 14pt")
-        self.label.setFixedWidth(width)
-        self.upd_text = ""
-        self.env_text = ""
-        self.set_widget(self.label)
-    
-    def respond(self, obj, signal):
-        if signal == RLSignal.CLOCK_UPDATE:
-            self.upd_text = f"Global step: {self.agent.glo_steps}"
-        elif signal == RLSignal.VIEW_UPDATE:
-            step = obj.step
-            ep = f"Episode: {obj.ep}"
-            t = f"Step: {step['t']}"
-            action = f"Action: {step['action']}"
-            r = f"Reward: {round(step['r'], 3)}"
-            avals = "Action-Values:\n"+"\n".join([str(round(x, 3)) for x in step['avals']])
-            tgt = f"Target-Value: {round(step['cmd'].tgt, 3)}"
-            self.env_text = f"{ep}\n{t}\n{action}\n{r}\n{tgt}\n{avals}"
-        self._update_text()
-    
-    def _update_text(self):
-        self.label.setText(f"Info:\n\n{self.upd_text}\n{self.env_text}")
-
-
 class GuiButton(QPushButton):
     def __init__(self, text=None, bgcolor="white", color="black", fontsize=12):
         super().__init__(text=text)
@@ -192,6 +164,34 @@ class FPSSlider(GuiObject):
         self.notify(RLSignal.FPS_CHANGE)
 
 
+class GuiLabel(GuiObject, AgentObserver):
+    def __init__(self, text=None, width=0):
+        super().__init__()
+        self.label = QLabel(text)
+        self.label.setStyleSheet("color: white; font-size: 14pt")
+        self.label.setFixedWidth(width)
+        self.upd_text = ""
+        self.env_text = ""
+        self.set_widget(self.label)
+    
+    def respond(self, obj, signal):
+        if signal == RLSignal.CLOCK_UPDATE:
+            self.upd_text = f"Global step: {self.agent.glo_steps}"
+        elif signal == RLSignal.VIEW_UPDATE:
+            step = obj.step
+            ep = f"Episode: {obj.ep}"
+            t = f"Step: {step.t}"
+            action = f"Action: {step.action}"
+            r = f"Reward: {round(step.r, 3)}"
+            avals = "Action-Values:\n"+"\n".join([str(round(x, 3)) for x in step.avals])
+            tgt = f"Target-Value: {round(step.cmd.tgt, 3)}"
+            self.env_text = f"{ep}\n{t}\n{action}\n{r}\n{tgt}\n{avals}"
+        self._update_text()
+    
+    def _update_text(self):
+        self.label.setText(f"Info:\n\n{self.upd_text}\n{self.env_text}")
+
+
 class GuiGraph(GuiObject):
     def __init__(self, width=0, height=0, window=100, ypad=0.2, num_lines=1):
         super().__init__()
@@ -239,10 +239,10 @@ class CurActionValGraph(GuiGraph):
     def respond(self, obj: EnvControl, signal):
         if signal == RLSignal.VIEW_UPDATE:
             step = obj.step
-            aval = step['avals'][step['a']]
-            if step['t'] > 0:
-                self.slide(step['t'])
-                self.ax.plot([step['t'] - 1, step['t']], [self.prev, aval], color='white', lw=1)
+            aval = step.avals[step.a]
+            if step.t > 0:
+                self.slide(step.t)
+                self.ax.plot([step.t - 1, step.t], [self.prev, aval], color='white', lw=1)
                 self.num_dash += 1
                 self.fig.canvas.draw()
             self.prev = aval
@@ -261,15 +261,14 @@ class ActionValsGraph(GuiGraph):
     def respond(self, obj: EnvControl, signal):
         if signal == RLSignal.VIEW_UPDATE:
             step = obj.step
-            avals = step['avals']
-            self.num_lines = len(avals)
-            if step['t'] > 0:
-                self.slide(step['t'])
-                for prev, aval in zip(self.prevs, avals):
-                    self.ax.plot([step['t'] - 1, step['t']], [prev, aval], color='white', lw=1)
+            self.num_lines = len(step.avals)
+            if step.t > 0:
+                self.slide(step.t)
+                for prev, aval in zip(self.prevs, step.avals):
+                    self.ax.plot([step.t - 1, step.t], [prev, aval], color='white', lw=1)
                 self.num_dash += 1
                 self.fig.canvas.draw()
-            self.prevs = avals.copy()
+            self.prevs = step.avals.copy()
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
             self.num_dash = 0

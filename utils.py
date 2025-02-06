@@ -11,19 +11,6 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 
-class StepData:
-    def __init__(self, s, a, r, cumr, avals, tgt, step_num, ep_num):
-        self.s = s
-        self.a = a
-        self.r = r
-        self.cumr = cumr
-        self.avals = avals
-        self.tgt = tgt
-        self.step_num = step_num
-        self.ep_num = ep_num
-        self.sar = (self.s, self.a, self.r)
-
-
 class Buffer:
     def __init__(self, size, default=None):
         self.size = size
