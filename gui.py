@@ -198,8 +198,11 @@ class GuiLabel(GuiObject, AgentObserver):
 class GuiGraph(GuiObject):
     def __init__(self, width=0, height=0, window=100, ypad=0.2):
         super().__init__()
-        self.window = window
-        self.ypad = ypad
+        self._window = window
+        self._ypad = ypad
+
+        self._t = None
+        self._thread = threading.Thread()
 
         dpi = plt.rcParams['figure.dpi']
         self.fig = Figure(figsize=(width / dpi, height / dpi))
@@ -216,47 +219,59 @@ class GuiGraph(GuiObject):
 
         self.graph = FigureCanvasQTAgg(self.fig)
         self.set_widget(self.graph)
-
-        self.t1 = threading.Thread()
-
-    def slide(self, t):
-        return
-        lines = self.ax.get_lines()
-        if lines and lines[-1].get_xdata()[1] >= t:
-            # print(self.ax.get_lines())
-            # while self.ax.get_lines() and self.ax.get_lines()[0].get_xdata()[0] < t - self.window + 1:
-            #     self.ax.get_lines()
-            #     self.ax.get_lines()[0].remove()
-            # for _ in range(self.num_lines):
-            #     self.ax.get_lines()[0].remove()
-            self.ax.set_xlim(t - self.window + 1, t)
-            data = [dash.get_data()[1][1] for dash in self.ax.get_lines()]
-            mi, ma = min(data), max(data)
-            ra = ma - mi
-            self.ax.set_ylim(mi - ra * self.ypad, ma + ra * self.ypad)
     
     def respond(self, obj, signal):
         if signal == RLSignal.VIEW_UPDATE:
+            self._t = obj.step.t
             self.view_update(obj.step)
-            if not self.t1.is_alive():
-                self.t1 = threading.Thread(target=self._draw, daemon=True)
-                self.t1.start()
+            if not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._draw, daemon=True)
+                self._thread.start()
+        
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
             self.new_ep(obj)
+        
         elif signal == RLSignal.TRAIN_START:
             self.train_start(obj)
+        
         else:
             self.update(obj, signal)
     
     def _draw(self):
         time.sleep(0.002)
+        self._slide()
         self.fig.canvas.draw()
     
+    def _slide(self):
+        lines = self.ax.get_lines()
+        if lines:
+            l, r = lines[0].get_xdata()[0], lines[-1].get_xdata()[0]
+            if r - l > self._window:
+                self._clip_left()
+                self.ax.set_xlim(self._t - self._window + 1, self._t)
+                data = [dash.get_data()[1][1] for dash in self.ax.get_lines()]
+                mi, ma = min(data), max(data)
+                ra = ma - mi
+                self.ax.set_ylim(mi - ra * self._ypad, ma + ra * self._ypad)
+    
+    def _clip_left(self):
+        it = iter(self.ax.get_lines())
+        cur = next(it)
+        num = 0
+        while cur.get_xdata()[0] < self._t - self._window:
+            num += 1
+            try:
+                tmp = next(it)
+                cur.remove()
+                cur = tmp
+            except StopIteration:
+                break
+    
     def view_update(self, step): pass
-    def update(self, obj, signal): pass
     def new_ep(self, obj): pass
     def train_start(self, obj): pass
+    def update(self, obj, signal): pass
 
 
 class CurActionValGraph(GuiGraph):
@@ -269,7 +284,6 @@ class CurActionValGraph(GuiGraph):
     def view_update(self, step):
         aval = step.avals[step.a]
         if step.t > 0:
-            self.slide(step.t)
             self.ax.plot([step.t - 1, step.t], [self.prev, aval], color='white', lw=1)
         self.prev = aval
 
@@ -284,7 +298,6 @@ class ActionValsGraph(GuiGraph):
     
     def view_update(self, step):
         if step.t > 0:
-            self.slide(step.t)
             for prev, col, aval, action in zip(self.prevs,  self.colours, step.avals, step.actions):
                 self.ax.plot([step.t - 1, step.t], [prev, aval],
                               color=col, lw=1, label=action)

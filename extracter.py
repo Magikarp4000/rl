@@ -20,7 +20,7 @@ class ExtracterPlus(Extracter):
     def extract(self, agent, s, a, r, new_a, new_s, t, cmd):
         data = super().extract(agent, s, a, r, new_a, new_s, t, cmd)
         data.update(
-            avals = agent.bhv_action_vals(s).flat,
+            avals = list(agent.bhv_action_vals(s).flat),
             actions = agent.env.actions
         )
         return data
