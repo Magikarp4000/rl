@@ -74,12 +74,12 @@ class TrainButton(GuiObject):
     
     def click(self):
         self.btn.setEnabled(False)
-        self.notify(RLSignal.TRAIN_START)
+        self.notify(RLSignal.TRAIN_CLICKED)
     
     def respond(self, obj, signal):
         if signal == RLSignal.STOP_SIMULATION:
             self.btn.setEnabled(True)
-        elif signal == RLSignal.TEST_START:
+        elif signal == RLSignal.TEST_CLICKED:
             self.btn.setEnabled(False)
 
 
@@ -96,7 +96,7 @@ class StopButton(GuiObject):
         self.notify(RLSignal.STOP_SIMULATION)
 
     def respond(self, obj, signal):
-        if signal == RLSignal.TRAIN_START or signal == RLSignal.TEST_START:
+        if signal == RLSignal.TRAIN_CLICKED or signal == RLSignal.TEST_CLICKED:
             self.btn.setEnabled(True)
 
 
@@ -109,12 +109,12 @@ class TestButton(GuiObject):
     
     def click(self):
         self.btn.setEnabled(False)
-        self.notify(RLSignal.TEST_START)
+        self.notify(RLSignal.TEST_CLICKED)
     
     def respond(self, obj, signal):
         if signal == RLSignal.STOP_SIMULATION:
             self.btn.setEnabled(True)
-        elif signal == RLSignal.TRAIN_START:
+        elif signal == RLSignal.TRAIN_CLICKED:
             self.btn.setEnabled(False)
 
 
@@ -181,7 +181,7 @@ class GuiLabel(GuiObject, AgentObserver):
             step = obj.step
             ep = f"Episode: {obj.ep}"
             t = f"Step: {step.t}"
-            action = f"Action: {step.action}"
+            action = f"Action: {step.actions[step.a]}"
             r = f"Reward: {round(step.r, 3)}"
             avals = "Action-Values:\n"+"\n".join([str(round(x, 3)) for x in step.avals])
             tgt = f"Target-Value: {round(step.cmd.tgt, 3)}"
@@ -246,35 +246,46 @@ class CurActionValGraph(GuiGraph):
                 self.num_dash += 1
                 self.fig.canvas.draw()
             self.prev = aval
+        
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
             self.num_dash = 0
 
 
 class ActionValsGraph(GuiGraph):
-    def __init__(self, width=0, height=0, window=100, ypad=0.2, num_lines=1):
-        super().__init__(width, height, window, ypad, num_lines)
+    def __init__(self, width=0, height=0, window=100, ypad=0.2):
+        super().__init__(width, height, window, ypad)
         self.ax.set_xlabel("Steps", color='white')
         self.ax.set_ylabel("Action-Values", color='white')
         self.prevs = None
+        self.colours = None
     
-    def respond(self, obj: EnvControl, signal):
-        if signal == RLSignal.VIEW_UPDATE:
+    def respond(self, obj, signal):
+        if signal == RLSignal.TRAIN_START:
+            self.ax.clear()
+            self.colours = [
+                self.ax.plot([], [], label=action)[0].get_color() for action in obj.env.actions
+            ]
+            self.fig.legend()
+        
+        elif signal == RLSignal.VIEW_UPDATE:
             step = obj.step
             self.num_lines = len(step.avals)
             if step.t > 0:
                 self.slide(step.t)
-                for prev, aval in zip(self.prevs, step.avals):
-                    self.ax.plot([step.t - 1, step.t], [prev, aval], color='white', lw=1)
+                for prev, col, aval, action in zip(self.prevs,  self.colours, step.avals, step.actions):
+                    self.ax.plot([step.t - 1, step.t], [prev, aval],
+                                 color=col, lw=1, label=action)                
                 self.num_dash += 1
                 self.fig.canvas.draw()
             self.prevs = step.avals.copy()
+        
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
             self.num_dash = 0
 
 
-class Gui(QWidget, Observer):
+class Gui(QWidget):
     def __init__(self, agent: Agent, scene: EnvScene):
         super().__init__()
         self.agent = agent
@@ -309,8 +320,8 @@ class Gui(QWidget, Observer):
         self.side_panel.addWidget(self.info.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
-        self.curaval_graph = CurActionValGraph(380, 380, window=40)
-        self.avals_graph = ActionValsGraph(380, 380, window=40)
+        self.curaval_graph = CurActionValGraph(380, 380, window=100)
+        self.avals_graph = ActionValsGraph(380, 380, window=100)
         self.graph_panel_wgt = QWidget()
         self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.graph_panel = QGridLayout(self.graph_panel_wgt)
@@ -318,8 +329,10 @@ class Gui(QWidget, Observer):
         self.graph_panel.addWidget(self.avals_graph.widget(), 1, 0)
         self.graph_panel.setAlignment(Qt.AlignTop)
 
-        self.control.observe(agent)
-        self.info.observe(agent)
+        self.control.observe(self.agent)
+        self.info.observe(self.agent)
+
+        self.agent.attach(self.avals_graph)
 
         self.control.attach(self.info)
         self.control.attach(self.curaval_graph)
@@ -360,10 +373,4 @@ class Gui(QWidget, Observer):
         
         self.clock = Clock()
         self.clock.attach(self.info)
-        self.clock.attach(self)
         self.clock.start()
-
-    
-    # def respond(self, obj, signal):
-    #     if signal == RLSignal.CLOCK_UPDATE:
-    #         print(self.view.size())

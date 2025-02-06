@@ -18,7 +18,7 @@ import data_transfer
 from envs import Env
 from params import Param, UniformDecay
 
-from observer import Observer
+from observer import Observable, Observer
 from rlsignal import RLSignal
 
 
@@ -35,7 +35,7 @@ class Command:
         self.update = update
 
 
-class Agent(ABC, Observer):
+class Agent(ABC, Observable, Observer):
     def __init__(self, env: Env, algo, extracter=None, config=[]):
         super().__init__()
         self.env = env
@@ -56,7 +56,7 @@ class Agent(ABC, Observer):
         self._metadata = {}
     
     def respond(self, obj, signal):
-        if signal == RLSignal.TRAIN_START:
+        if signal == RLSignal.TRAIN_CLICKED:
             self.running = True
             self.thread = threading.Thread(
                 target=self.train,
@@ -65,7 +65,7 @@ class Agent(ABC, Observer):
                 daemon=True,
             )
             self.thread.start()
-        elif signal == RLSignal.TEST_START:
+        elif signal == RLSignal.TEST_CLICKED:
             self.running = True
             self.thread = threading.Thread(
                 target=self.train,
@@ -86,12 +86,14 @@ class Agent(ABC, Observer):
         if save_params:
             self._save_params(n, eps, expstart)
         
+        self.notify(RLSignal.TRAIN_START)
         start_time = time.time()
         try:
             self._train(n, maxstep, expstart, batch_size, display_graph)
         except ThreadInterrupt:
             return
         end_time = time.time()
+        self.notify(RLSignal.TRAIN_END)
 
         if save_time:
             self._config_meta({'duration': str(end_time - start_time)})
@@ -185,7 +187,9 @@ class Agent(ABC, Observer):
             start_time = time.time()
             start_ep = self.ep
             while self.ep < min(n, start_ep + batch_size):
+                self.notify(RLSignal.EP_START)
                 steps = self._train_episode(maxstep, expstart)
+                self.notify(RLSignal.EP_END)
                 self.steps_list.append(steps)
                 self.ep += 1
             end_time = time.time()

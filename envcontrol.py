@@ -34,7 +34,7 @@ class EnvControl(Observable, Observer, AgentObserver):
     
     def respond(self, obj, signal):
         match signal:
-            case RLSignal.TRAIN_START | RLSignal.TEST_START:
+            case RLSignal.TRAIN_CLICKED | RLSignal.TEST_CLICKED:
                 self.timer.start(1000 / self.fps)
             case RLSignal.STOP_SIMULATION:
                 self.timer.stop()
