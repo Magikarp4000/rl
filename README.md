@@ -3,6 +3,10 @@
 **NOTE:**
 Open AI gym + Pytorch support soon.
 
+**Run:**
+- `pip install -r requirements.txt`
+- Run `guitest.py`
+
 **Algorithms:**
 
 Tabular
