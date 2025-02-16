@@ -222,6 +222,7 @@ class PerfLabel(GuiObject):
             update = f"Update time: {self.update.avg()}"
             write = f"Write time: {self.write.avg()}"
             self.label.setText(f"{step}\n{env}\n{algo}\n{extract}\n{update}\n{write}")
+            self.notify(RLSignal.VIEW_UPDATE)
     
     def update_perf(self, perf):
         self.step.update(perf.step)
@@ -233,12 +234,9 @@ class PerfLabel(GuiObject):
 
 
 class GuiGraph(GuiObject):
-    def __init__(self, width=0, height=0, window=100, ypad=0.2):
+    def __init__(self, width=0, height=0):
         super().__init__()
-        self._window = window
-        self._ypad = ypad
 
-        self._t = None
         self._thread = threading.Thread()
 
         dpi = plt.rcParams['figure.dpi']
@@ -259,11 +257,7 @@ class GuiGraph(GuiObject):
     
     def respond(self, obj, signal):
         if signal == RLSignal.VIEW_UPDATE:
-            self._t = obj.step.data.t
-            self.view_update(obj.step.data)
-            if not self._thread.is_alive():
-                self._thread = threading.Thread(target=self._draw, daemon=True)
-                self._thread.start()
+            self.view_update(obj)
         
         elif signal == RLSignal.VIEW_NEW_EP:
             self.ax.clear()
@@ -275,10 +269,30 @@ class GuiGraph(GuiObject):
         else:
             self.update(obj, signal)
     
-    def _draw(self):
+    def draw(self):
         time.sleep(0.002) # reduce flickering chance
-        self._slide()
         self.fig.canvas.draw()
+    
+    def view_update(self, obj):
+        if not self._thread.is_alive():
+            self._thread = threading.Thread(target=self.draw, daemon=True)
+            self._thread.start()
+    
+    def new_ep(self, obj): pass
+    def train_start(self, obj): pass
+    def update(self, obj, signal): pass
+
+
+class SlidingGraph(GuiGraph):
+    def __init__(self, width=0, height=0, window=100, ypad=0.2):
+        super().__init__(width, height)
+        self._window = window
+        self._ypad = ypad
+        self._t = None
+    
+    def draw(self):
+        self._slide()
+        super().draw()
     
     def _slide(self):
         lines = self.ax.get_lines()
@@ -305,27 +319,32 @@ class GuiGraph(GuiObject):
             except StopIteration:
                 break
     
-    def view_update(self, step): pass
+    def view_update(self, obj):
+        self._t = obj.step.data.t
+        super().view_update(obj)
+
     def new_ep(self, obj): pass
     def train_start(self, obj): pass
     def update(self, obj, signal): pass
 
 
-class CurActionValGraph(GuiGraph):
+class CurActionValGraph(SlidingGraph):
     def __init__(self, width=0, height=0, window=100, ypad=0.2):
         super().__init__(width, height, window, ypad)
         self.ax.set_xlabel("Steps", color='white')
         self.ax.set_ylabel("Action-Value", color='white')
         self.prev = None
     
-    def view_update(self, step):
+    def view_update(self, obj):
+        step = obj.step.data
         aval = step.avals[step.a]
         if step.t > 0:
             self.ax.plot([step.t - 1, step.t], [self.prev, aval], color='white', lw=1)
         self.prev = aval
+        super().view_update(obj)
 
 
-class ActionValsGraph(GuiGraph):
+class ActionValsGraph(SlidingGraph):
     def __init__(self, width=0, height=0, window=100, ypad=0.2):
         super().__init__(width, height, window, ypad)
         self.ax.set_xlabel("Steps", color='white')
@@ -333,12 +352,14 @@ class ActionValsGraph(GuiGraph):
         self.prevs = None
         self.colours = None
     
-    def view_update(self, step):
+    def view_update(self, obj):
+        step = obj.step.data
         if step.t > 0:
             for prev, col, aval, action in zip(self.prevs,  self.colours, step.avals, step.actions):
                 self.ax.plot([step.t - 1, step.t], [prev, aval],
                               color=col, lw=1, label=action)
         self.prevs = step.avals.copy()
+        super().view_update(obj)
     
     def train_start(self, obj):
         self.ax.clear()
@@ -346,6 +367,23 @@ class ActionValsGraph(GuiGraph):
             self.ax.plot([], [], label=action)[0].get_color() for action in obj.env.actions
         ]
         self.fig.legend()
+
+
+class PerfGraph(GuiGraph):
+    def __init__(self, width=0, height=0):
+        super().__init__(width, height)
+        self.ax.set_xlabel("Operations", color='white')
+        self.ax.set_ylabel("Time Per Step", color='white')
+        self.prev = None
+        self.labels = ['Total', 'Env', 'Algo', 'Extract', 'Update', 'Write']
+        self.bars = self.ax.bar([], [])
+    
+    def view_update(self, obj: PerfLabel):
+        vals = [obj.step.avg(), obj.env.avg(), obj.algo.avg(), obj.extract.avg(),
+                obj.update.avg(), obj.write.avg()]
+        self.bars.remove()
+        self.bars = self.ax.bar(self.labels, vals, color='white')
+        super().view_update(obj)
 
 
 class Gui(QWidget):
@@ -375,8 +413,8 @@ class Gui(QWidget):
         self.ctrl_panel.addWidget(self.fpsslider.widget(), 0, 4)
         self.ctrl_panel.setAlignment(Qt.AlignLeft)
 
-        self.data = DataLabel("Info:", width / 7.5)
-        self.perf = PerfLabel("", width / 7.5)
+        self.data = DataLabel("Info:", width / 7)
+        self.perf = PerfLabel("", width / 7)
 
         self.side_panel_wgt = QWidget()
         self.side_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -387,11 +425,13 @@ class Gui(QWidget):
 
         # self.curaval_graph = CurActionValGraph(380, 380, window=100)
         self.avals_graph = ActionValsGraph(380, 380, window=100)
+        self.perf_graph = PerfGraph(250, 250)
         self.graph_panel_wgt = QWidget()
         self.graph_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.graph_panel = QGridLayout(self.graph_panel_wgt)
         # self.graph_panel.addWidget(self.curaval_graph.widget(), 0, 0)
         self.graph_panel.addWidget(self.avals_graph.widget(), 1, 0)
+        self.graph_panel.addWidget(self.perf_graph.widget(), 2, 0)
         self.graph_panel.setAlignment(Qt.AlignTop)
 
         self.control.observe(self.agent)
@@ -403,6 +443,8 @@ class Gui(QWidget):
         self.control.attach(self.perf)
         # self.control.attach(self.curaval_graph)
         self.control.attach(self.avals_graph)
+
+        self.perf.attach(self.perf_graph)
 
         self.train_btn.attach(self.stop_btn)
         self.train_btn.attach(self.test_btn)
