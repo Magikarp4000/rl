@@ -11,6 +11,40 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 
+class FastAvg:
+    def __init__(self, avg=0, cnt=0):
+        self._avg = avg
+        self._cnt = cnt
+    
+    def avg(self) -> float:
+        return self._avg
+    
+    def cnt(self) -> int:
+        return self._cnt
+
+    def update(self, val):
+        self._avg = (val + self._cnt * self._avg) / (self._cnt + 1)
+        self._cnt += 1
+
+
+class Data:
+    def __init__(self, **kwargs):
+        self.update(**kwargs)
+    
+    def update(self, **kwargs):
+        for name, val in kwargs.items():
+            setattr(self, name, val)
+
+
+class StepInfo:
+    def __init__(self, data: Data, perf: Data):
+        self.data = data
+        self.perf = perf
+    
+    def sar(self):
+        return (self.data.s, self.data.a, self.data.r)
+
+
 class Buffer:
     def __init__(self, size, default=None):
         self.size = size
@@ -74,7 +108,7 @@ class ReplayBuffer:
         self._read_idx = 0
         self._auto_sync = False
     
-    def read(self):
+    def read(self) -> StepInfo:
         if self._read_idx < len(self._read):
             return self._read[self._read_idx]
         else:

@@ -21,8 +21,8 @@ class EnvControl(Observable, Observer, AgentObserver):
         try:
             self.step = self.agent.replay.read()
             self.ep = self.agent.replay.read_ep()
-            self.update_state(self.step.s, self.step.a, self.step.r)
-            if self.step.t == 0:
+            self.update_state(*self.step.sar())
+            if self.step.data.t == 0:
                 self.notify(RLSignal.VIEW_NEW_EP)
             self.notify(RLSignal.VIEW_UPDATE)
         except BufferIndexError:

@@ -13,6 +13,8 @@ from utils import (
     random_argmax,
     name,
     ReplayBuffer,
+    Data,
+    StepInfo
 )
 import data_transfer
 from envs import Env
@@ -60,7 +62,7 @@ class Agent(ABC, Observable, Observer):
             self.running = True
             self.thread = threading.Thread(
                 target=self.train,
-                kwargs={'n': 1000, 'eps': UniformDecay(0.2, 0.05, decay=5*10**-5), 'alpha': Param(0.01),
+                kwargs={'n': 1000, 'eps': UniformDecay(0.2, 0.05, decay=5*10**-5), 'alpha': Param(3*10**-4),
                         'batch_size': 1, 'display_graph': False},
                 daemon=True,
             )
@@ -86,7 +88,7 @@ class Agent(ABC, Observable, Observer):
         self.alpha = alpha
         
         if save_params:
-            self._save_params(n, eps, expstart)
+            self._save_params(n, expstart)
         
         start_time = time.time()
         try:
@@ -168,9 +170,12 @@ class Agent(ABC, Observable, Observer):
     def _save_params(self, *args, **kwargs):
         try:
             train_args = inspect.getfullargspec(self.train)[0][2: 6]
-            algo_args = self.algo.get_params()
-            self._config_meta({'approximator': name(self)})
-            self._config_meta({'algo': algo_args})
+            self._config_meta({
+                'approximator': name(self),
+                'algo': self.algo.get_params(),
+                'eps': self.eps,
+                'alpha': self.alpha
+                })
             self._config_meta({name: self._save_x(val) for name, val in zip(train_args, args)})
             self._config_meta(kwargs)
         except IndexError:
@@ -210,22 +215,37 @@ class Agent(ABC, Observable, Observer):
         steps = 0
         self.replay.create_new_ep(self.ep + 1)
 
+        step_start = 0
+        env_start = 0
+        algo_start = 0
+        extract_start = 0
+        update_start = 0
+        write_start = 0
+        step_end = 0
+        write_perf = 0
+        step_perf = 0
+
         while not (cmd.terminate or steps > maxstep):
+            step_start = time.perf_counter()
             if not self.running:
                 self.replay.clear()
                 self.glo_steps -= steps
                 raise ThreadInterrupt()
             
+            env_start = time.perf_counter()
             if not is_terminal:
                 new_s, r = self.env.next_state(s, a)
                 new_a = self.get_action(new_s, eps=self.eps())
                 if new_s == self.env.T:
                     is_terminal = True
             
+            algo_start = time.perf_counter()
             cmd = self.algo(self, s, a, r, new_s, new_a, steps, is_terminal)
+
+            extract_start = time.perf_counter()
             data = self._extracter.extract(self, s, a, r, new_a, new_s, steps, cmd)
-            self.replay.write(data)
             
+            update_start = time.perf_counter()
             if cmd.update:
                 self.update(cmd.tgt, cmd.s, cmd.a)
             self.eps.update(steps, self.glo_steps)
@@ -234,6 +254,20 @@ class Agent(ABC, Observable, Observer):
             s, a = new_s, new_a
             steps += 1
             self.glo_steps += 1
+
+            write_start = time.perf_counter()
+            perf = Data(
+                step = step_perf,
+                env = algo_start - env_start,
+                algo = extract_start - algo_start,
+                extract = update_start - extract_start,
+                update = write_start - update_start,
+                write = write_perf
+            )
+            self.replay.write(StepInfo(data, perf))
+            step_end = time.perf_counter()
+            write_perf = step_end - write_start
+            step_perf = step_end - step_start
         return steps
     
     def _init_state(self, expstart):

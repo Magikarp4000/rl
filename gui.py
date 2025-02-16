@@ -12,6 +12,7 @@ from envcontrol import EnvControl
 from observer import Observer, Observable
 from agentobserver import AgentObserver
 from rlsignal import RLSignal
+from utils import FastAvg
 
 import time
 
@@ -167,7 +168,7 @@ class FPSSlider(GuiObject):
         self.notify(RLSignal.FPS_CHANGE)
 
 
-class GuiLabel(GuiObject, AgentObserver):
+class DataLabel(GuiObject, AgentObserver):
     def __init__(self, text=None, width=0):
         super().__init__()
         self.label = QLabel(text)
@@ -181,7 +182,7 @@ class GuiLabel(GuiObject, AgentObserver):
         if signal == RLSignal.CLOCK_UPDATE:
             self.upd_text = f"Global step: {self.agent.glo_steps}"
         elif signal == RLSignal.VIEW_UPDATE:
-            step = obj.step
+            step = obj.step.data
             ep = f"Episode: {obj.ep}"
             t = f"Step: {step.t}"
             action = f"Action: {step.actions[step.a]}"
@@ -193,6 +194,42 @@ class GuiLabel(GuiObject, AgentObserver):
     
     def _update_text(self):
         self.label.setText(f"Info:\n\n{self.upd_text}\n{self.env_text}")
+
+
+class PerfLabel(GuiObject):
+    def __init__(self, text=None, width=0):
+        super().__init__()
+        self.label = QLabel(text)
+        self.label.setStyleSheet("color: white; font-size: 14pt")
+        self.label.setFixedWidth(width)
+        self.set_widget(self.label)
+
+        self.step = FastAvg()
+        self.env = FastAvg()
+        self.algo = FastAvg()
+        self.extract = FastAvg()
+        self.update = FastAvg()
+        self.write = FastAvg()
+    
+    def respond(self, obj, signal):
+        if signal == RLSignal.VIEW_UPDATE:
+            perf = obj.step.perf
+            self.update_perf(perf)
+            step = f"Time per step: {self.step.avg()}"
+            env = f"Env time: {self.env.avg()}"
+            algo = f"Algo time: {self.algo.avg()}"
+            extract = f"Extract time: {self.extract.avg()}"
+            update = f"Update time: {self.update.avg()}"
+            write = f"Write time: {self.write.avg()}"
+            self.label.setText(f"{step}\n{env}\n{algo}\n{extract}\n{update}\n{write}")
+    
+    def update_perf(self, perf):
+        self.step.update(perf.step)
+        self.env.update(perf.env)
+        self.algo.update(perf.algo)
+        self.extract.update(perf.extract)
+        self.update.update(perf.update)
+        self.write.update(perf.write)
 
 
 class GuiGraph(GuiObject):
@@ -222,8 +259,8 @@ class GuiGraph(GuiObject):
     
     def respond(self, obj, signal):
         if signal == RLSignal.VIEW_UPDATE:
-            self._t = obj.step.t
-            self.view_update(obj.step)
+            self._t = obj.step.data.t
+            self.view_update(obj.step.data)
             if not self._thread.is_alive():
                 self._thread = threading.Thread(target=self._draw, daemon=True)
                 self._thread.start()
@@ -239,7 +276,7 @@ class GuiGraph(GuiObject):
             self.update(obj, signal)
     
     def _draw(self):
-        time.sleep(0.002)
+        time.sleep(0.002) # reduce flickering chance
         self._slide()
         self.fig.canvas.draw()
     
@@ -338,12 +375,14 @@ class Gui(QWidget):
         self.ctrl_panel.addWidget(self.fpsslider.widget(), 0, 4)
         self.ctrl_panel.setAlignment(Qt.AlignLeft)
 
-        self.info = GuiLabel("Info:", width / 7.5)
+        self.data = DataLabel("Info:", width / 7.5)
+        self.perf = PerfLabel("", width / 7.5)
 
         self.side_panel_wgt = QWidget()
         self.side_panel_wgt.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.side_panel = QGridLayout(self.side_panel_wgt)
-        self.side_panel.addWidget(self.info.widget())
+        self.side_panel.addWidget(self.data.widget())
+        self.side_panel.addWidget(self.perf.widget())
         self.side_panel.setAlignment(Qt.AlignTop)
 
         # self.curaval_graph = CurActionValGraph(380, 380, window=100)
@@ -356,11 +395,12 @@ class Gui(QWidget):
         self.graph_panel.setAlignment(Qt.AlignTop)
 
         self.control.observe(self.agent)
-        self.info.observe(self.agent)
+        self.data.observe(self.agent)
 
         self.agent.attach(self.avals_graph)
 
-        self.control.attach(self.info)
+        self.control.attach(self.data)
+        self.control.attach(self.perf)
         # self.control.attach(self.curaval_graph)
         self.control.attach(self.avals_graph)
 
@@ -398,5 +438,5 @@ class Gui(QWidget):
         self.showMaximized()
         
         self.clock = Clock()
-        self.clock.attach(self.info)
+        self.clock.attach(self.data)
         self.clock.start()
